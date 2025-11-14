@@ -176,6 +176,13 @@ async function renderChecklistFromCatalog(eventObj) {
   .modal-overlay.show{display:flex;}
   .modal-content{width: min(620px, 92vw); max-height: 82vh; overflow: auto; background:#fff; border:1px solid #e5e7eb; border-radius:14px; box-shadow:0 20px 50px rgba(0,0,0,.35); padding:16px;}
 </style>
+
+<!-- Auto-libs (idempotent) -->
+<script>(function(){function add(src,id){if(document.getElementById(id))return;var s=document.createElement('script');s.src=src;s.id=id;document.head.appendChild(s);} 
+if(!window.Papa) add("https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js","papaparse-lib");
+if(!(window.Chart&&window.Chart.defaults)) add("https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js","chartjs-lib");
+})();</script>
+
 </head>
 
 <body>
@@ -331,7 +338,15 @@ async function renderChecklistFromCatalog(eventObj) {
       <h2 class="text-xl font-bold text-gray-800 mb-4">Filtro por Estructura Territorial</h2>
       <div id="leader-pills-container" class="flex flex-wrap gap-3 mb-8 p-4 bg-white rounded-xl shadow-lg border border-gray-200">
         <button id="filter-all" class="leader-pill px-4 py-2 rounded-full font-medium text-sm bg-gray-300 text-gray-800 active" data-leader="all" onclick="setLeaderFilter('all')">Todos los Grupos</button>
-      </div>
+      
+  <!-- Municipio inline -->
+  <div id="municipioFilterWrap" class="inline-flex items-center gap-2 ml-4">
+    <label for="calFilterMunicipio" class="font-semibold whitespace-nowrap">Municipio:</label>
+    <select id="calFilterMunicipio" class="border border-gray-300 rounded-lg px-2 py-1 text-sm min-w-[200px]">
+      <option value="all">Todos</option>
+    </select>
+  </div>
+</div>
 
       <!-- ===== Asistencia (arriba) — SIN “Base inicial” ===== -->
       <h2 class="text-xl font-bold text-gray-800 mb-4">Asistencia Proyectada 2025</h2>
@@ -950,6 +965,13 @@ r["CALLE"]=row["CALLE"]||row["Calle"]||"";
       r["PLATOS"]=+row["PLATOS"]||0;
       r["SERVILLETAS"]=+row["SERVILLETAS"]||0;
       r["VASOS"]=+row["VASOS"]||0;
+      r["JUGUETES BEBES"]=+row["JUGUETES BEBES"]||0;
+      r["JUGUETES NIÑOS"]=+row["JUGUETES NIÑOS"]||0;
+      r["JUGUETES NIÑAS"]=+row["JUGUETES NIÑAS"]||0;
+      r["DONAS"]=+row["DONAS"]||0;
+      r["PLATOS CHICO"]=+row["PLATOS CHICO"]||0;
+      r["PLATO GRANDE"]=+row["PLATO GRANDE"]||0;
+      r["FRITURAS"]=+row["FRITURAS"]||0;
       r["ELECTRODOMESTICOS"]=+row["ELECTRODOMESTICOS"]||0;
       r["TENEDORES"]=+row["TENEDORES"]||0;
       r["POSADA_2024"]=(row["POSADA_2024"]||row["POSADA 2024"]||"").toString().toUpperCase().trim();
@@ -1542,7 +1564,7 @@ function renderEventPanel(ev){
      const lc=document.getElementById("leadersCount"); if(lc) lc.textContent = leaders.length;const tel  = info.tel ? `<a class="underline text-blue-600" href="tel:${info.tel}">${info.tel}</a>` : '—';
     const checked = info.llamada ? 'checked' : '';
     const nota = info.llamada_nota || '';
-    const fichaBtn = info.ficha ? `<button data-ficha="${encodeURIComponent(info.ficha)}" class="btn">📄 Ficha</button>` : '';
+    const fichaBtn = info.ficha ? `<button data-ficha="${encodeURIComponent(info.ficha)}" class="btn">📄 Ficha Lider</button>` : '';
     const rid = info.rid || '';
     return `
       <div class="p-2 border rounded-lg">
@@ -1615,7 +1637,91 @@ function renderEventPanel(ev){
     }
   });
 
-  /* Checklist por evento (UI + carga + guardado) */
+  
+  // === Insumos de la posada (Hoja 1) — solo lectura ===
+  try {
+    const insCardId = 'insumosHoja1Card';
+    let insCard = container.querySelector('#'+insCardId);
+    if (!insCard) {
+      insCard = document.createElement('div');
+      insCard.id = insCardId;
+      insCard.className = 'mt-3 p-3 rounded-lg border border-blue-100 bg-blue-50';
+      insCard.innerHTML = `
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <div class="font-semibold">Insumos de la posada (Hoja 1)</div>
+            <div class="text-xs text-gray-500">Suma de insumos por líder(es) en Hoja 1 — solo lectura.</div>
+          </div>
+        </div>
+        <div id="insumosHoja1Body" class="grid grid-cols-2 gap-2 text-sm"></div>`;
+      container.appendChild(insCard);
+    }
+    const body = insCard.querySelector('#insumosHoja1Body');
+    if (body) {
+      const leadersList = (leaders && leaders.length ? leaders : (ex.lideres||ex.leader||"").split(';').map(s=>s.trim()).filter(Boolean));
+      if (!Array.isArray(ALL_ROWS) || !ALL_ROWS.length) {
+        body.innerHTML = '<p class="text-xs text-gray-500">Datos de Hoja 1 aún no cargados.</p>';
+      } else if (!leadersList.length) {
+        body.innerHTML = '<p class="text-xs text-gray-500">Este evento no tiene líder(es) asignado(s) en el calendario.</p>';
+      } else {
+        const norm = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
+        const rowsByName = new Map(ALL_ROWS.map(r => [norm(r["NOMBRE"]||''), r]));
+        const keys = [
+          "DULCES","JUGUETES",
+          "JUGUETES BEBES","JUGUETES NIÑOS","JUGUETES NIÑAS",
+          "KITS ESTUFAS","TINACOS","ELECTRODOMESTICOS","COBIJAS",
+          "PIÑATAS","DESPENSAS","SODAS","DONAS",
+          "PLATOS CHICO","SERVILLETAS","PLATO GRANDE","VASOS","FRITURAS"
+        ];
+        const labels = {
+          "DULCES":"Dulces",
+          "JUGUETES":"Juguetes",
+          "JUGUETES BEBES":"Juguetes bebés",
+          "JUGUETES NIÑOS":"Juguetes niños",
+          "JUGUETES NIÑAS":"Juguetes niñas",
+          "KITS ESTUFAS":"Kits estufas",
+          "TINACOS":"Tinacos",
+          "ELECTRODOMESTICOS":"Electrodomésticos",
+          "COBIJAS":"Cobijas",
+          "PIÑATAS":"Piñatas",
+          "DESPENSAS":"Despensas",
+          "SODAS":"Sodas",
+          "DONAS":"Donas",
+          "PLATOS CHICO":"Platos chico",
+          "SERVILLETAS":"Servilletas",
+          "PLATO GRANDE":"Plato grande",
+          "VASOS":"Vasos",
+          "FRITURAS":"Frituras"
+        };
+        const totals = {};
+        keys.forEach(k => totals[k] = 0);
+        leadersList.forEach(name => {
+          const row = rowsByName.get(norm(name));
+          if (!row) return;
+          keys.forEach(k => {
+            const v = Number(row[k] ?? 0);
+            if (!Number.isNaN(v)) totals[k] += v;
+          });
+        });
+        const blocks = [];
+        keys.forEach(k => {
+          const v = totals[k];
+          if (v > 0) {
+            blocks.push(
+              `<div class="flex items-center justify-between"><span>${labels[k]||k}</span><span class="font-semibold">${v.toLocaleString('es-MX')}</span></div>`
+            );
+          }
+        });
+        body.innerHTML = blocks.length
+          ? blocks.join('')
+          : '<p class="text-xs text-gray-500">Todos los insumos están en 0 para los líderes de este evento.</p>';
+      }
+    }
+  } catch(_err) {
+    console.warn('Insumos Hoja1 card error', _err);
+  }
+
+/* Checklist por evento (UI + carga + guardado) */
   const checkWrap = container.querySelector('#checklistList');
   const checkHint = container.querySelector('#checklistHint');
   const btnSaveChecklist = container.querySelector('#btnSaveChecklist');
@@ -2483,7 +2589,526 @@ if(typeof setSolicitudesKpi==='function' && !window._solPatch){
     try{ _origSet(n); }catch(e){ console.error(e); }
   };
 }
+
+/* === Municipio Filter (DATA-DRIVEN v2) === */
+(function(){
+  if(window.__MUNICIPIO_FILTER_V2__) return; window.__MUNICIPIO_FILTER_V2__ = true;
+
+  function normalizeMun(v){
+    v = (v??'').toString().trim().toUpperCase();
+    const map = {'Á':'A','É':'E','Í':'I','Ó':'O','Ú':'U','Ü':'U'};
+    v = v.replace(/[ÁÉÍÓÚÜ]/g, ch => map[ch] || ch);
+    if(v==='CD JUAREZ' || v==='CIUDAD JUAREZ') v='JUAREZ';
+    if(v==='CUAUHTÉMOC') v='CUAUHTEMOC';
+    return v;
+  }
+  function readMunicipio(evt){
+    const candidates = ['Municipio','municipio','MUNICIPIO','Municipios','MUNICIPIOS','mun','Mpio','MPIO'];
+    for(const k of candidates){
+      if(evt && k in evt && String(evt[k]).trim()!=='') return String(evt[k]).trim();
+    }
+    return '';
+  }
+  function getRawEvents(){
+    const raw = (window.ALL_CALENDAR_EVENTS_RAW && Array.isArray(window.ALL_CALENDAR_EVENTS_RAW))
+      ? window.ALL_CALENDAR_EVENTS_RAW
+      : (Array.isArray(window.CALENDAR_EVENTS) ? window.CALENDAR_EVENTS.slice() : []);
+    return raw;
+  }
+  window.refreshMunicipioFilter = function(){
+    try{
+      const sel = document.getElementById('calFilterMunicipio');
+      if(!sel) return;
+      const events = getRawEvents();
+      const map = new Map(); // norm -> original sample
+      for(const e of events){
+        const m = readMunicipio(e);
+        if(!m) continue;
+        const norm = normalizeMun(m);
+        if(!map.has(norm)) map.set(norm, m);
+      }
+      sel.innerHTML = '<option value="all">Todos</option>';
+      const opts = Array.from(map.entries()).sort((a,b)=>a[1].localeCompare(b[1],'es'));
+      for(const [norm, label] of opts){
+        const opt = document.createElement('option');
+        opt.value = norm;
+        opt.textContent = label;
+        sel.appendChild(opt);
+      }
+    }catch(err){ console.warn('[Municipio] refresh error:', err); }
+  };
+
+  const prevApply = window.applyCalendarFilters;
+  window.applyCalendarFilters = function(){
+    let base = null;
+    if(typeof prevApply === 'function'){ base = prevApply(); }
+    try{
+      const sel = document.getElementById('calFilterMunicipio');
+      const chosen = sel ? sel.value : 'all';
+      const raw = getRawEvents();
+      if(chosen && chosen!=='all'){
+        const normSel = chosen;
+        window.CALENDAR_EVENTS = raw.filter(e => normalizeMun(readMunicipio(e)) === normSel);
+      }else{
+        window.CALENDAR_EVENTS = raw.slice();
+      }
+      if(typeof window.renderCalendar === 'function') window.renderCalendar();
+      if(typeof window.updateAllKpis === 'function') window.updateAllKpis();
+      if(typeof window.refreshCharts === 'function') window.refreshCharts();
+    }catch(err){ console.warn('[Municipio] apply error:', err); }
+    return base;
+  };
+
+  document.addEventListener('change', function(e){
+    if(e.target && e.target.id === 'calFilterMunicipio'){
+      try{ window.applyCalendarFilters(); }catch(_){}
+    }
+  });
+
+  (function init(){
+    try{ refreshMunicipioFilter(); }catch(_){}
+  })();
+})();
+/* === Municipio Filter Guards (observer + late init + persistence) === */
+(function(){
+  if(window.__MUNICIPIO_GUARDS__) return; window.__MUNICIPIO_GUARDS__=true;
+
+  let lastMun = 'all';
+
+  function ensureMunUI(){
+    const container = document.getElementById('leader-pills-container');
+    if(!container) return;
+    if(!document.getElementById('calFilterMunicipio')){
+      const wrap = document.createElement('div');
+      wrap.id = 'municipioFilterWrap';
+      wrap.className = 'inline-flex items-center gap-2 ml-4';
+      wrap.innerHTML = '<label for="calFilterMunicipio" class="font-semibold whitespace-nowrap">Municipio:</label>\
+<select id="calFilterMunicipio" class="border border-gray-300 rounded-lg px-2 py-1 text-sm min-w-[200px]">\
+<option value="all">Todos</option>\
+</select>';
+      container.appendChild(wrap);
+    }
+    const sel = document.getElementById('calFilterMunicipio');
+    if(sel){
+      try{
+        if([...sel.options].some(o=>o.value===lastMun)) sel.value = lastMun;
+      }catch(_){}
+    }
+  }
+
+  const obs = new MutationObserver(() => {
+    ensureMunUI();
+    try{ refreshMunicipioFilter(); }catch(_){}
+  });
+  const startObserver = () => {
+    const c = document.getElementById('leader-pills-container');
+    if(!c) return;
+    try{ obs.disconnect(); }catch(_){}
+    obs.observe(c, { childList:true, subtree:false });
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    ensureMunUI();
+    startObserver();
+  });
+
+  const tick = setInterval(() => {
+    try{
+      const data = (window.ALL_CALENDAR_EVENTS_RAW && window.ALL_CALENDAR_EVENTS_RAW.length) ? window.ALL_CALENDAR_EVENTS_RAW : (window.CALENDAR_EVENTS||[]);
+      if(Array.isArray(data) && data.length>0){
+        try{ ensureMunUI(); refreshMunicipioFilter(); }catch(_){}
+        clearInterval(tick);
+      }
+    }catch(_){}
+  }, 400);
+
+  document.addEventListener('change', function(e){
+    if(e.target && e.target.id==='calFilterMunicipio'){
+      lastMun = e.target.value || 'all';
+    }
+  });
+
+  let lastCount = -1;
+  setInterval(() => {
+    try{
+      const raw = (window.ALL_CALENDAR_EVENTS_RAW && Array.isArray(window.ALL_CALENDAR_EVENTS_RAW)) ? window.ALL_CALENDAR_EVENTS_RAW : [];
+      const count = raw.length;
+      if(count !== lastCount){
+        lastCount = count;
+        ensureMunUI();
+        try{ refreshMunicipioFilter(); }catch(_){}
+        const sel = document.getElementById('calFilterMunicipio');
+        if(sel){
+          if(![...sel.options].some(o=>o.value===lastMun)) lastMun='all';
+          sel.value = lastMun;
+        }
+      }
+    }catch(_){}
+  }, 800);
+
+})();
 </script>
 <!-- ================== /PATCH V6 ===================================================== -->
+
+<!-- ============ RFZ PATCH v7 — scoped to event panel only ============ -->
+<script>
+(function(){
+  if(window.__rfz_patch_v7) return; window.__rfz_patch_v7 = true;
+
+  /* Utils */
+  const N = s => (s||"").toString().trim();
+  const NK = s => N(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase();
+  const hasTxt = (el, t) => el && NK(el.textContent||"").indexOf(NK(t))>=0;
+  const telHref = raw => { const d=(raw||"").replace(/[^0-9+]/g,""); return d?("tel:"+d):""; };
+
+  function findEventPanel(){
+    // candidates: floating drawers, asides, dialogs, right panels
+    const cands = document.querySelectorAll(
+      "aside, [role='dialog'], [role='complementary'], .event-details, #event-details, .sidePanel, #sidePanel, .drawer, .fixed, .right-0, .panel, .fc-drawer, .fc-sidebar"
+    );
+    for(const c of cands){
+      const okEquipo = !![...c.querySelectorAll('label')].find(l=>/^\s*Equipo\s*$/i.test(l.textContent||""));
+      const okAnyBlock = !!(
+        [...c.querySelectorAll("h1,h2,h3,h4,strong,div,span")].find(n=>hasTxt(n,"Integrantes del equipo")||hasTxt(n,"Líderes del evento")||hasTxt(n,"Checklist del evento"))
+      );
+      if(okEquipo && okAnyBlock) return c;
+    }
+    return null;
+  }
+  const getPanel = findEventPanel;
+
+  /* ===== Coordinador: primera fila por EQUIPO (no tocar body si no hay panel) ===== */
+  const DOC_ID="1uUViSN-noINwFabhZm53CSI0mAQW29uy2PPVd2pbUb0";
+  const GID_EQUIPOS="841249185";
+  async function loadEquipos(){
+    if(window.EQUIPOS_ROWS?.length) return window.EQUIPOS_ROWS;
+    const url=`https://docs.google.com/spreadsheets/d/${DOC_ID}/export?format=csv&gid=${GID_EQUIPOS}`;
+    const res=await fetch(url,{cache:"no-store"}); const text=await res.text();
+    try{
+      if(window.Papa){
+        const p=Papa.parse(text,{header:true,skipEmptyLines:true,transformHeader:h=>h.replace(/^\\uFEFF/,'').trim()});
+        window.EQUIPOS_ROWS=p.data||[];
+      }else{
+        const lines=text.split(/\\r?\\n/).filter(Boolean), headers=(lines.shift()||"").split(",");
+        window.EQUIPOS_ROWS = lines.map(l=>{const c=l.split(","),o={}; headers.forEach((h,i)=>o[h]=c[i]||""); return o;});
+      }
+    }catch(e){ console.warn("parse equipos v7", e); window.EQUIPOS_ROWS=[]; }
+    return window.EQUIPOS_ROWS;
+  }
+  function firstRowByEquipo(rows){
+    const idx={};
+    (rows||[]).forEach(r=>{
+      const k=NK(r.EQUIPO); if(!k) return;
+      if(!idx[k]) idx[k]={nombre:N(r.NOMBRE)||"S/D", tel:N(r.TELEFONO)||"", dep:N(r.DEPENDENCIA||r.DEPENDEN)||""};
+      else if(!idx[k].tel && N(r.TELEFONO)) idx[k].tel=N(r.TELEFONO);
+    });
+    return idx;
+  }
+  function currentEquipoFrom(panel){
+    const lbl=[...panel.querySelectorAll("label")].find(l=>/^\\s*Equipo\\s*$/i.test(l.textContent||""));
+    let sel = lbl && (lbl.parentElement.querySelector("select") || lbl.nextElementSibling?.querySelector("select"));
+    if(!sel) sel = panel.querySelector("select");
+    const v = sel ? (sel.value || (sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].textContent) || "") : "";
+    return N(v);
+  }
+  function ensureCoordBlock(panel){
+    const title = [...panel.querySelectorAll("h1,h2,h3,h4,strong,div,span")].find(n=>hasTxt(n,"Integrantes del equipo"));
+    if(!title) return null;
+    const host = title.closest(".card, .shadow, .rounded, .rounded-xl, .panel, .box, .border, .p-4, .p-3, .p-2, section, div") || title.parentElement;
+    if(!host) return null;
+    if(!panel.querySelector("#rfz-coordinador-block")){
+      const wrap=document.createElement("div");
+      wrap.id="rfz-coordinador-block";
+      wrap.className="bg-white border border-gray-200 rounded-xl p-3 mb-2";
+      wrap.innerHTML=`<h4 class="font-extrabold text-gray-800 text-base mb-2">Coordinador del equipo</h4>
+        <div id="rfz-coordinador-body" class="text-sm text-gray-700">Cargando…</div>`;
+      host.parentElement.insertBefore(wrap, host);
+      host.style.display="none"; // ocultar integrantes solo dentro del panel
+    }
+    return panel.querySelector("#rfz-coordinador-body");
+  }
+  async function paintCoordinator(){
+    const panel=getPanel(); if(!panel) return; // nada sin panel
+    const body=ensureCoordBlock(panel); if(!body) return;
+    const eq=currentEquipoFrom(panel); if(!eq) return;
+    const rows=await loadEquipos(); const idx=firstRowByEquipo(rows); const info=idx[NK(eq)];
+    if(info){
+      body.innerHTML = `<div class="flex items-center gap-2">
+        <span class="font-medium">${info.nombre}</span>
+        <span class="text-gray-400">—</span>
+        ${info.tel?`<a class="text-blue-600 hover:underline" href="${telHref(info.tel)}">${info.tel}</a>`:`<span class="text-gray-500">S/TEL</span>`}
+        ${info.dep?`<span class="text-gray-500">— ${info.dep}</span>`:""}
+      </div>`;
+    }
+  }
+
+  /* ===== Mover Líderes al tope de Checklist (clonando), dentro del panel ===== */
+  function renameFichaIn(container){
+    const nodes = container.querySelectorAll("a,button,span,div");
+    nodes.forEach(n=>{ const t=(n.textContent||"").trim(); if(/^ficha$/i.test(t)) n.textContent="Ficha Lider"; });
+  }
+  function leadersToChecklist(){
+    const panel=getPanel(); if(!panel) return;
+    const titleLeaders=[...panel.querySelectorAll("h1,h2,h3,h4,strong,div,span")].find(n=>hasTxt(n,"Líderes del evento"));
+    const titleCheck=[...panel.querySelectorAll("h1,h2,h3,h4,strong,div,span")].find(n=>hasTxt(n,"Checklist del evento"));
+    if(!titleLeaders || !titleCheck) return;
+    const leadersCard = titleLeaders.closest(".card, .shadow, .rounded, .rounded-xl, .panel, .box, .border, .p-4, .p-3, .p-2, section, div") || titleLeaders.parentElement;
+    const checkCard   = titleCheck.closest(".card, .shadow, .rounded, .rounded-xl, .panel, .box, .border, .p-4, .p-3, .p-2, section, div") || titleCheck.parentElement;
+    if(!leadersCard || !checkCard) return;
+    if(panel.querySelector("#rfz-leaders-clone")) return;
+    const clone=document.createElement("div");
+    clone.id="rfz-leaders-clone";
+    clone.className="mb-3 border border-gray-200 rounded-lg p-3 bg-white";
+    clone.innerHTML=`<h4 class="font-extrabold text-gray-800 text-base mb-2">Líderes del evento</h4><div class="text-sm">${leadersCard.innerHTML}</div>`;
+    renameFichaIn(clone);
+    checkCard.insertBefore(clone, checkCard.firstChild);
+    leadersCard.style.display="none";
+  }
+
+  function run(){ leadersToChecklist(); paintCoordinator(); }
+
+  // Observa solo el panel si existe, o el body hasta que aparezca
+  let target = getPanel() || document.body;
+  const obs = new MutationObserver(()=>{ try{ run(); }catch(e){} });
+  obs.observe(target, {childList:true, subtree:true});
+
+  // Dispara en clics del calendario
+  document.addEventListener("click",(e)=>{
+    if(e.target.closest(".fc-event,[data-role='calendar-event'],[data-event-id]")) setTimeout(run, 300);
+  });
+
+  // Reintentos cortos (no invasivos)
+  let tries=0; const iv=setInterval(()=>{ if(getPanel()){ run(); if(++tries>8) clearInterval(iv); } else { tries++; if(tries>8) clearInterval(iv); } }, 400);
+})();
+</script>
+<!-- ============ /RFZ PATCH v7 ============ -->
+
+
+<!-- ======== POSADAS 2025 — HOTFIX INTEGRADO (no borra tu código) ======== -->
+<script>
+(function(){'use strict';
+  const AUTH_SALT = "posadas-2025-salt-v1";
+  async function sha256Hex(str){ const e=new TextEncoder().encode(str); const b=await crypto.subtle.digest('SHA-256',e); return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join(''); }
+  const PATCH_CREDS = {"admin": "b4ce76b8f89df5e1e5b31e30323ef54b53136e4e50f4c4e24908d28093851875", "DIRECTORCCG01": "ea5b9602bde8496c90316e739403b4af809ca2efab6add84ce75d1baa941ee54", "DIRECTOR": "523f510c39ef1a5df06273d01893cc47babb5dafaf5b9552a8cc198196da48ac", "Varela13": "d720e1d708c20c4dab2ec7693ddee59a80c4ecca0f17d89ccd87b17d2f435958", "SubAlan": "690b91e487146d9ac5653985e5d57c77e3ccef3f1b85b0079cdad87c2f724b1c", "coord": "7415b71ef89f5fc47f1c10840d89a5aab03f9a75949f4d2f17bdbd28f8a61880", "visitante": "fad5183f9f99d1908264f4e505a38d2c552f66c124ae06688d71a319934fcdbc", "RafaL": "5c7d1b7321b84bdc365cd82ea8790ee96f1e82a02cb978484ffa1813688b8785", "AlphaIsabel": "86211fc7a6be2473c068a4ba938c58616861562be2b41fe451faca26e282e2d9"};
+  function byId(id){return document.getElementById(id);}
+  function $$(sel,root=document){return root.querySelector(sel);}
+  function $$all(sel,root=document){return Array.from(root.querySelectorAll(sel));}
+
+  const _origCheck = window.checkLogin;
+  window.checkLogin = async (user, pass) => {
+    const dig = await sha256Hex(`${user}:${AUTH_SALT}:${pass}`);
+    if (PATCH_CREDS[user] && PATCH_CREDS[user]===dig) return true;
+    return _origCheck ? _origCheck(user, pass) : false;
+  };
+
+  const allowedDAT = new Set(["admin","DIRECTORCCG01","DIRECTOR","Varela13","SubAlan","RafaL"]);
+  const _origEnforce = window.enforceMenuAccess;
+  window.enforceMenuAccess = (user) => {
+    try {
+      const nodes = [
+        byId('menuDAT'),
+        $$('[data-menu="DAT"]'),
+        $$('a[href*="#dat"]'),
+        ...$$all('nav a, .menu a, .sidebar a')
+      ].filter(Boolean);
+      nodes.forEach(n=>{
+        const txt=(n.textContent||'').trim().toUpperCase();
+        if(txt.includes('DIRECCIÓN')||txt.includes('DIRECCION')||txt.includes('ACCION TERRITORIAL')||txt.includes('DAT')||n.id==='menuDAT'){
+          n.style.display = allowedDAT.has(user) ? '' : 'none';
+        }
+      });
+    }catch(_){}
+    if (typeof _origEnforce==='function') _origEnforce(user);
+  };
+
+  function normalizeMun(v){ v=(v??'').toString().trim().toUpperCase();
+    const map={'Á':'A','É':'E','Í':'I','Ó':'O','Ú':'U','Ü':'U'};
+    v=v.replace(/[ÁÉÍÓÚÜ]/g,ch=>map[ch]||ch);
+    if(v==='CD JUAREZ'||v==='CIUDAD JUAREZ') v='JUAREZ';
+    if(v==='CUAUHTÉMOC') v='CUAUHTEMOC';
+    return v;
+  }
+  function readMunicipio(evt){ const keys=['Municipio','municipio','MUNICIPIO','Municipios','MUNICIPIOS','mun','Mpio','MPIO'];
+    for(const k of keys) if(evt && k in evt && String(evt[k]).trim()!=='') return String(evt[k]).trim();
+    return '';
+  }
+  function getRawEvents(){ 
+    const a1=(Array.isArray(window.CALENDAR_EVENTS)&&window.CALENDAR_EVENTS.length)?window.CALENDAR_EVENTS:null;
+    const a2=(Array.isArray(window.ALL_CALENDAR_EVENTS_RAW)&&window.ALL_CALENDAR_EVENTS_RAW.length)?window.ALL_CALENDAR_EVENTS_RAW:null;
+    return a1||a2||[];
+  }
+  const _prevApply = window.applyCalendarFilters;
+  window.applyCalendarFilters = function(){ let base=null; if(typeof _prevApply==='function') base=_prevApply();
+    try{ const sel = byId('calFilterMunicipio'); const chosen = sel? sel.value : 'all';
+      const raw = (Array.isArray(window.ALL_CALENDAR_EVENTS_RAW)? window.ALL_CALENDAR_EVENTS_RAW.slice() : getRawEvents().slice());
+      if(chosen && chosen!=='all'){ const norm=chosen; window.CALENDAR_EVENTS = raw.filter(e => normalizeMun(readMunicipio(e))===norm); }
+      else window.CALENDAR_EVENTS = raw.slice();
+      if(window.calendarInstance && typeof calendarInstance.refetchEvents==='function') calendarInstance.refetchEvents();
+    }catch(err){ console.warn('[Municipio] apply error:',err); }
+    return base;
+  };
+  function patchCalendarSource(){ try{ if(!window.calendarInstance||typeof calendarInstance.setOption!=='function') return;
+      calendarInstance.setOption('events',(fetchInfo,success)=>{ const mapper=window.mapRawEventsToFullCalendar||((a)=>a); success(mapper(getRawEvents())); });
+  }catch(_){}} setTimeout(patchCalendarSource,80);
+
+  function queueLocalDateChange(id,fecha){ try{ const k='pendingDrops'; const L=JSON.parse(localStorage.getItem(k)||'[]'); L.push({id,fecha,ts:Date.now()}); localStorage.setItem(k,JSON.stringify(L)); }catch(_){}} 
+  async function flushDropQueue(){ try{ const k='pendingDrops'; const L=JSON.parse(localStorage.getItem(k)||'[]'); if(!L.length) return;
+      const nx=L[0]; const payload={id:nx.id,nueva_fecha:nx.fecha};
+      const r=await fetch(window.WEBAPP_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'calendar_move',data:payload})});
+      const ok=await r.json().catch(()=>({ok:false})); if(ok&&ok.ok){L.shift(); localStorage.setItem(k,JSON.stringify(L));}
+  }catch(_){}} setInterval(flushDropQueue,5000);
+  function patchEventDrop(){ try{ if(!window.calendarInstance||typeof calendarInstance.setOption!=='function') return;
+      calendarInstance.setOption('eventDrop',async(info)=>{ const ev=info.event; const id=ev.extendedProps?.id; const fecha=ev.start?ev.start.toISOString().slice(0,10):null;
+        try{ if(Array.isArray(window.ALL_CALENDAR_EVENTS_RAW)) window.ALL_CALENDAR_EVENTS_RAW.forEach(r=>{if(String(r.id)===String(id)) r.fecha=fecha;});
+              if(Array.isArray(window.CALENDAR_EVENTS)) window.CALENDAR_EVENTS.forEach(r=>{if(String(r.id)===String(id)) r.fecha=fecha;});
+              ev.setStart(new Date(fecha));
+              const payload={id,nueva_fecha:fecha};
+              const r=await fetch(window.WEBAPP_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'calendar_move',data:payload})});
+              const ok=await r.json().catch(()=>({ok:false})); if(!ok||!ok.ok) queueLocalDateChange(id,fecha);
+        }catch(_ ){ queueLocalDateChange(id,fecha); }
+      });
+  }catch(_){}} setTimeout(patchEventDrop,80);
+
+  (function(){ const _o=Element.prototype.scrollIntoView; Element.prototype.scrollIntoView=function(){/*no-op*/}; })();
+
+  const _origRender = window.renderEventPanel;
+  window.renderEventPanel = function(ev){ if(typeof _origRender==='function') _origRender(ev);
+    try{ const cont = byId('drawer')?.querySelector('.bd'); if(!cont) return;
+      let leaders = ev?.extendedProps?.leaders; if(!Array.isArray(leaders)) leaders=[]; leaders=leaders.filter(Boolean);
+      let top = byId('leadersTop'); if(!top){ top=document.createElement('div'); top.id='leadersTop'; top.className='mb-2 p-3 rounded-lg border border-gray-200 bg-white';
+        top.innerHTML='<div id="leadersTopTitle" class="font-extrabold text-gray-800 mb-1"></div><div id="leadersTopBody" class="text-sm text-gray-700"></div>';
+        cont.prepend(top);
+      }
+      const titleEl=byId('leadersTopTitle'), bodyEl=byId('leadersTopBody');
+      if(titleEl) titleEl.textContent = leaders.length>1? 'Líderes del evento':'Líder del evento';
+      if(bodyEl){ bodyEl.innerHTML = leaders.map((name)=>{ const info=(typeof window.findLeaderRecordByName==='function')?(findLeaderRecordByName(name)||{}):{};
+          const tel=info.tel?`<a class="text-blue-600 hover:underline" href="tel:${String(info.tel)}">${String(info.tel)}</a>`:'—';
+          const ficha=info.ficha?`<button type="button" data-ficha="${encodeURIComponent(info.ficha)}" class="btn btn-xs ml-2">📄 Ficha Lider</button>`:'';
+          return `<div class="flex items-center justify-between gap-2"><strong class="font-semibold">${name}</strong><div class="flex items-center gap-2">${tel}${ficha}</div></div>`;
+        }).join('')||'—';
+        $$all('button[data-ficha]', bodyEl).forEach(btn=>btn.addEventListener('click',()=>{ try{ window.openLeaderFicha&&openLeaderFicha(decodeURIComponent(btn.getAttribute('data-ficha')||'')); 
+      // Unificar UI: mover el panel funcional de líderes dentro del bloque superior y ocultar su encabezado
+      try{
+        const topEl = byId('leadersTop');
+        const lc = byId('leadersCard');
+        if(topEl && lc){
+          lc.open = true;
+          const sum = lc.querySelector('summary');
+          if(sum){ sum.style.display='none'; }
+          topEl.appendChild(lc);
+        }
+      }catch(_){}
+}catch(_ ){} }));
+      }
+      let card = byId('checklistCard'); if(card && card.tagName!=='DETAILS'){ const d=document.createElement('details'); d.id='checklistCard'; d.className=card.className+' group';
+        d.innerHTML='<summary class="flex items-center justify-between cursor-pointer select-none"><span class="font-semibold">Checklist del evento</span><span class="text-xs text-gray-600">(<span id="chkCount">0</span>)</span></summary>';
+        card.parentNode.insertBefore(d, card); d.appendChild(card);
+      }
+      const m = byId('equipoMembersList'); if(m) m.style.display='none';
+      $$all('*', cont).forEach(el=>{ if(el.textContent && el.textContent.trim()==='Integrantes del equipo') el.textContent='Coordinador del equipo'; });
+    }catch(_ ) {}
+  };
+
+  function hideEmptyCharts(){ const cards=$$all('[data-chart-card]'); cards.forEach(c=>{ try{ const cnv=c.querySelector('canvas'); const ch=cnv&&cnv._chartInstance; const ds=(ch&&ch.data&&ch.data.datasets)?ch.data.datasets:[];
+      const tot=ds.reduce((a,d)=>a+(Array.isArray(d.data)?d.data.reduce((x,y)=>x+(+y||0),0):0),0); if(!tot) c.style.display='none';
+    }catch(_ ){} });
+    const sec=byId('analysisSection'); if(sec){ const any=!!sec.querySelector('[data-chart-card]:not([style*="display: none"])'); if(!any) sec.style.display='none'; }
+  } window.addEventListener('load',()=>setTimeout(hideEmptyCharts,500));
+})();
+</script>
+<!-- ======== /HOTFIX INTEGRADO ======== -->
+
+<!-- Injected: unify leader panels (remove summary + move functional up) -->
+<script>
+(function() {
+  function textIncludes(el, regex) {
+    return el && regex.test((el.textContent || "").replace(/\s+/g, " ").trim());
+  }
+
+  function findCardByTitle(regex) {
+    const candidates = Array.from(document.querySelectorAll("section,div,article"));
+    // Prefer elements that contain a heading with matching text
+    for (const el of candidates) {
+      const heading = el.querySelector("h1,h2,h3,h4,h5,strong");
+      if (heading && regex.test((heading.textContent || ""))) {
+        return el;
+      }
+      if (textIncludes(el, regex) && el.querySelector("h1,h2,h3,h4,h5,strong")) {
+        return el;
+      }
+    }
+    // Fallback: search by aria-label
+    const aria = Array.from(document.querySelectorAll("[aria-label]"))
+      .find(n => regex.test(n.getAttribute("aria-label")||""));
+    return aria || null;
+  }
+
+  function countLeaders(card) {
+    if (!card) return 1;
+    // Try a counter bubble like "(1)" or a data attribute
+    const bubble = card.querySelector("[data-leader-count], .leader-count");
+    if (bubble) {
+      const n = parseInt((bubble.textContent||"").replace(/[^0-9]/g,""), 10);
+      if (!isNaN(n) && n > 0) return n;
+    }
+    // Try items
+    const items = card.querySelectorAll("[data-leader], .leader-item, .leader-row");
+    if (items.length) return items.length;
+    // Fallback to 1
+    return 1;
+  }
+
+  function retitle(card, n) {
+    if (!card) return;
+    const title = card.querySelector("h1,h2,h3,h4,h5,strong,.card-title");
+    if (title) {
+      title.textContent = (n > 1) ? "Líderes del evento" : "Líder del evento";
+      title.style.fontWeight = "700";
+    }
+    // Make leader names bold when possible
+    card.querySelectorAll(".leader-name, .font-medium, h6,strong").forEach(el => {
+      el.style.fontWeight = "700";
+    });
+    // Standardize button text
+    Array.from(card.querySelectorAll("button,a")).forEach(btn => {
+      const t = (btn.textContent||"").trim();
+      if (/^ficha/i.test(t)) btn.textContent = "Ficha Lider";
+    });
+  }
+
+  function relocate() {
+    try {
+      // Find the top summary card by its title
+      const summaryCard = findCardByTitle(/Líder del evento/i);
+      // Find the functional card by its title and presence of call/note controls
+      let leadersCard = findCardByTitle(/Líderes? del evento/i);
+      if (leadersCard && summaryCard && leadersCard !== summaryCard) {
+        // If leadersCard is nested deeper, move the whole card to the summary location
+        summaryCard.parentNode.insertBefore(leadersCard, summaryCard);
+        summaryCard.remove();
+      }
+      // After relocation or if only one exists, update title and emphasis
+      const card = leadersCard || summaryCard;
+      const n = countLeaders(card);
+      retitle(card, n);
+    } catch (e) {
+      console.warn("[leaders-relocate] error:", e);
+    }
+  }
+
+  // Run at DOM ready and also after small delay to allow frameworks to render
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      relocate();
+      setTimeout(relocate, 300);
+      setTimeout(relocate, 1000);
+    });
+  } else {
+    relocate();
+    setTimeout(relocate, 300);
+    setTimeout(relocate, 1000);
+  }
+})();
+</script>
 </body>
 </html>
