@@ -965,6 +965,13 @@ r["CALLE"]=row["CALLE"]||row["Calle"]||"";
       r["PLATOS"]=+row["PLATOS"]||0;
       r["SERVILLETAS"]=+row["SERVILLETAS"]||0;
       r["VASOS"]=+row["VASOS"]||0;
+      r["JUGUETES BEBES"]=+row["JUGUETES BEBES"]||0;
+      r["JUGUETES NIÑOS"]=+row["JUGUETES NIÑOS"]||0;
+      r["JUGUETES NIÑAS"]=+row["JUGUETES NIÑAS"]||0;
+      r["DONAS"]=+row["DONAS"]||0;
+      r["PLATOS CHICO"]=+row["PLATOS CHICO"]||0;
+      r["PLATO GRANDE"]=+row["PLATO GRANDE"]||0;
+      r["FRITURAS"]=+row["FRITURAS"]||0;
       r["ELECTRODOMESTICOS"]=+row["ELECTRODOMESTICOS"]||0;
       r["TENEDORES"]=+row["TENEDORES"]||0;
       r["POSADA_2024"]=(row["POSADA_2024"]||row["POSADA 2024"]||"").toString().toUpperCase().trim();
@@ -1630,7 +1637,91 @@ function renderEventPanel(ev){
     }
   });
 
-  /* Checklist por evento (UI + carga + guardado) */
+  
+  // === Insumos de la posada (Hoja 1) — solo lectura ===
+  try {
+    const insCardId = 'insumosHoja1Card';
+    let insCard = container.querySelector('#'+insCardId);
+    if (!insCard) {
+      insCard = document.createElement('div');
+      insCard.id = insCardId;
+      insCard.className = 'mt-3 p-3 rounded-lg border border-blue-100 bg-blue-50';
+      insCard.innerHTML = `
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <div class="font-semibold">Insumos de la posada (Hoja 1)</div>
+            <div class="text-xs text-gray-500">Suma de insumos por líder(es) en Hoja 1 — solo lectura.</div>
+          </div>
+        </div>
+        <div id="insumosHoja1Body" class="grid grid-cols-2 gap-2 text-sm"></div>`;
+      container.appendChild(insCard);
+    }
+    const body = insCard.querySelector('#insumosHoja1Body');
+    if (body) {
+      const leadersList = (leaders && leaders.length ? leaders : (ex.lideres||ex.leader||"").split(';').map(s=>s.trim()).filter(Boolean));
+      if (!Array.isArray(ALL_ROWS) || !ALL_ROWS.length) {
+        body.innerHTML = '<p class="text-xs text-gray-500">Datos de Hoja 1 aún no cargados.</p>';
+      } else if (!leadersList.length) {
+        body.innerHTML = '<p class="text-xs text-gray-500">Este evento no tiene líder(es) asignado(s) en el calendario.</p>';
+      } else {
+        const norm = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
+        const rowsByName = new Map(ALL_ROWS.map(r => [norm(r["NOMBRE"]||''), r]));
+        const keys = [
+          "DULCES","JUGUETES",
+          "JUGUETES BEBES","JUGUETES NIÑOS","JUGUETES NIÑAS",
+          "KITS ESTUFAS","TINACOS","ELECTRODOMESTICOS","COBIJAS",
+          "PIÑATAS","DESPENSAS","SODAS","DONAS",
+          "PLATOS CHICO","SERVILLETAS","PLATO GRANDE","VASOS","FRITURAS"
+        ];
+        const labels = {
+          "DULCES":"Dulces",
+          "JUGUETES":"Juguetes",
+          "JUGUETES BEBES":"Juguetes bebés",
+          "JUGUETES NIÑOS":"Juguetes niños",
+          "JUGUETES NIÑAS":"Juguetes niñas",
+          "KITS ESTUFAS":"Kits estufas",
+          "TINACOS":"Tinacos",
+          "ELECTRODOMESTICOS":"Electrodomésticos",
+          "COBIJAS":"Cobijas",
+          "PIÑATAS":"Piñatas",
+          "DESPENSAS":"Despensas",
+          "SODAS":"Sodas",
+          "DONAS":"Donas",
+          "PLATOS CHICO":"Platos chico",
+          "SERVILLETAS":"Servilletas",
+          "PLATO GRANDE":"Plato grande",
+          "VASOS":"Vasos",
+          "FRITURAS":"Frituras"
+        };
+        const totals = {};
+        keys.forEach(k => totals[k] = 0);
+        leadersList.forEach(name => {
+          const row = rowsByName.get(norm(name));
+          if (!row) return;
+          keys.forEach(k => {
+            const v = Number(row[k] ?? 0);
+            if (!Number.isNaN(v)) totals[k] += v;
+          });
+        });
+        const blocks = [];
+        keys.forEach(k => {
+          const v = totals[k];
+          if (v > 0) {
+            blocks.push(
+              `<div class="flex items-center justify-between"><span>${labels[k]||k}</span><span class="font-semibold">${v.toLocaleString('es-MX')}</span></div>`
+            );
+          }
+        });
+        body.innerHTML = blocks.length
+          ? blocks.join('')
+          : '<p class="text-xs text-gray-500">Todos los insumos están en 0 para los líderes de este evento.</p>';
+      }
+    }
+  } catch(_err) {
+    console.warn('Insumos Hoja1 card error', _err);
+  }
+
+/* Checklist por evento (UI + carga + guardado) */
   const checkWrap = container.querySelector('#checklistList');
   const checkHint = container.querySelector('#checklistHint');
   const btnSaveChecklist = container.querySelector('#btnSaveChecklist');
