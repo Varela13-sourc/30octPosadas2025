@@ -528,17 +528,162 @@ if(!(window.Chart&&window.Chart.defaults)) add("https://cdn.jsdelivr.net/npm/cha
 const AUTH_SALT = "posadas-2025-salt-v1";
 /* Hash = SHA-256( user + ":" + AUTH_SALT + ":" + password ) */
 const CREDS = {
-  "admin"        : "b4ce76b8f89df5e1e5b31e30323ef54b53136e4e50f4c4e24908d28093851875",
-  "coord"        : "7415b71ef89f5fc47f1c10840d89a5aab03f9a75949f4d2f17bdbd28f8a61880",
-  "visitante"    : "fad5183f9f99d1908264f4e505a38d2c552f66c124ae06688d71a319934fcdbc",
-  "DIRECTORCCG01": "ea5b9602bde8496c90316e739403b4af809ca2efab6add84ce75d1baa941ee54",
-  "Varela13"     : "d720e1d708c20c4dab2ec7693ddee59a80c4ecca0f17d89ccd87b17d2f435958",
-  "SubAlan"      : "690b91e487146d9ac5653985e5d57c77e3ccef3f1b85b0079cdad87c2f724b1c",
-  "RafaL"        : "5c7d1b7321b84bdc365cd82ea8790ee96f1e82a02cb978484ffa1813688b8785",
-  "AlphaIsabel"  : "86211fc7a6be2473c068a4ba938c58616861562be2b41fe451faca26e282e2d9"
+  "admin"       : "b4ce76b8f89df5e1e5b31e30323ef54b53136e4e50f4c4e24908d28093851875",
+  "coord"       : "7415b71ef89f5fc47f1c10840d89a5aab03f9a75949f4d2f17bdbd28f8a61880",
+  "visitante"   : "fad5183f9f99d1908264f4e505a38d2c552f66c124ae06688d71a319934fcdbc",
+  "DIRECTORCCG01" : "ea5b9602bde8496c90316e739403b4af809ca2efab6add84ce75d1baa941ee54",
+  "Varela13"    : "d720e1d708c20c4dab2ec7693ddee59a80c4ecca0f17d89ccd87b17d2f435958",
+  "SubAlan"     : "690b91e487146d9ac5653985e5d57c77e3ccef3f1b85b0079cdad87c2f724b1c",
+  "RafaL"       : "5c7d1b7321b84bdc365cd82ea8790ee96f1e82a02cb978484ffa1813688b8785",
+  "AlphaIsabel" : "86211fc7a6be2473c068a4ba938c58616861562be2b41fe451faca26e282e2d9",
+  "COHESION"    : "756512c9b714d69ee6fbe02d7a94fdd30d9eb72ca44b637d53de54ac72b5e395",
+  "SDHYBC"      : "572b94e387ae2cd1499096519d9eecb7ac9c19c1468f536b5b5b01b3b8595712",
+  "VINCULACION" : "f5e7d5c924cef0439c21a09367683687a91a8a9ebb848a6ebb07aad53cad702d",
+  "VULNERABLES" : "7ddc347cab9cfffee036d8d11ace7392b1f32a167f7f89bacda5ef727d690457",
+  "ICHDII"      : "42a59c1fca75387484d0d7d6526fac68e269aae2d712b0b0bcd50e0d8b48ed06"
 };
+/* Usuarios por dependencia (usuario / contraseña):
+   - COHESION / Cohesion2025!  → COHESIÓN SOCIAL
+   - SDHYBC / Sdhybc2025!  → DESARROLLO HUMANO Y BIEN COMÚN (SDHyBC)
+   - VINCULACION / Vinculacion2025!  → VINCULACIÓN CIUDADANA (SSVCYPP)
+   - VULNERABLES / Vulnerables2025!  → GRUPOS VULNERABLES
+   - ICHDII / Ichdii2025!  → ICHDII
+*/
+
+
 /* Usuarios con acceso a “Dirección de Acción Territorial” */
 const DAT_ALLOWED = new Set(["admin","DIRECTORCCG01","Varela13","SubAlan"]);
+/* Usuarios con vista limitada (solo calendario, sin tableros avanzados) */
+const LIMITED_VIEW_USERS = new Set(["COHESION","SDHYBC","VINCULACION","VULNERABLES","ICHDII"]);
+
+/* Cache de elementos que se ocultarán para vista limitada */
+let LIMITED_VIEW_ELEMENTS_CACHE = null;
+
+function collectLimitedViewElements(){
+  const elements = [];
+
+  try{
+    // Filtro por Estructura Territorial (título + pastillas)
+    const leaderPills = document.getElementById('leader-pills-container');
+    if(leaderPills){
+      elements.push(leaderPills);
+      const h2 = leaderPills.previousElementSibling;
+      if(h2 && h2.tagName === 'H2') elements.push(h2);
+    }
+
+    // Asistencia Proyectada 2025 (título + KPIs)
+    const asistencia = document.getElementById('asistencia-kpis');
+    if(asistencia){
+      elements.push(asistencia);
+      const h2 = asistencia.previousElementSibling;
+      if(h2 && h2.tagName === 'H2') elements.push(h2);
+    }
+
+    // Seguimiento de llamadas a líderes (Global) (título + KPIs)
+    const llamadas = document.getElementById('llamadas-kpis');
+    if(llamadas){
+      elements.push(llamadas);
+      const h2 = llamadas.previousElementSibling;
+      if(h2 && h2.tagName === 'H2') elements.push(h2);
+    }
+
+    // Requerimientos Consolidados (Por Insumo): título + selector mes + tarjetas
+    const insumosTotals = document.getElementById('insumos-totals');
+    if(insumosTotals){
+      elements.push(insumosTotals);
+      const monthSel = document.getElementById('insumosMonthSelect');
+      if(monthSel){
+        const row = monthSel.closest('div');
+        if(row) elements.push(row);
+      }
+      let node = insumosTotals.previousElementSibling;
+      while(node && node.tagName !== 'H2'){
+        node = node.previousElementSibling;
+      }
+      if(node && node.tagName === 'H2') elements.push(node);
+    }
+
+    // Mapa de Posadas (Avanzado): título + contenedor del mapa
+    const mapWrap = document.getElementById('mapWrap');
+    if(mapWrap){
+      elements.push(mapWrap);
+      const h2 = mapWrap.previousElementSibling;
+      if(h2 && h2.tagName === 'H2') elements.push(h2);
+    }
+
+    // Análisis de Distribución y Demanda: título + grid de gráficas
+    const chart1 = document.getElementById('chartInsumosByGroup');
+    const chart2 = document.getElementById('chartTopInsumos');
+    let grid = null;
+    if(chart1 && typeof chart1.closest === 'function'){
+      grid = chart1.closest('.grid');
+    }else if(chart2 && typeof chart2.closest === 'function'){
+      grid = chart2.closest('.grid');
+    }
+    if(grid){
+      elements.push(grid);
+      let node = grid.previousElementSibling;
+      while(node && node.tagName !== 'H2'){
+        node = node.previousElementSibling;
+      }
+      if(node && node.tagName === 'H2') elements.push(node);
+    }
+
+    // Detalle de Beneficiarios Seleccionados: título + botones + buscador + tabla
+    const h2Benef = Array.from(document.querySelectorAll('h2')).find(h => 
+      h.textContent && h.textContent.includes('Detalle de Beneficiarios Seleccionados')
+    );
+    if(h2Benef){
+      const headerRow = h2Benef.parentElement;
+      if(headerRow) elements.push(headerRow);
+    }
+    const searchInput = document.getElementById('searchInput');
+    if(searchInput && typeof searchInput.closest === 'function'){
+      const searchRow = searchInput.closest('div');
+      if(searchRow) elements.push(searchRow);
+    }
+    const dataTable = document.getElementById('dataTable');
+    if(dataTable && typeof dataTable.closest === 'function'){
+      const tableWrapper = dataTable.closest('.bg-white');
+      if(tableWrapper) elements.push(tableWrapper);
+    }
+  }catch(_){}
+
+  return elements;
+}
+
+function getLimitedViewElements(){
+  if(!LIMITED_VIEW_ELEMENTS_CACHE){
+    LIMITED_VIEW_ELEMENTS_CACHE = collectLimitedViewElements();
+  }
+  return LIMITED_VIEW_ELEMENTS_CACHE;
+}
+
+function applyUserViewRestrictions(user){
+  const limited = LIMITED_VIEW_USERS.has(user);
+  const els = getLimitedViewElements();
+
+  els.forEach(el => {
+    if(!el) return;
+    if(limited){
+      if(el.dataset._origDisplay === undefined){
+        el.dataset._origDisplay = el.style.display || "";
+      }
+      el.style.display = "none";
+    }else{
+      if(el.dataset._origDisplay !== undefined){
+        el.style.display = el.dataset._origDisplay;
+      }else{
+        el.style.display = "";
+      }
+    }
+  });
+}
+
+
+/* Usuario actualmente autenticado (para filtros por dependencia/equipo) */
+let CURRENT_USER = null;
+
 
 /* Bloqueo con persistencia en localStorage */
 const LOCK_MAX = 5, LOCK_SECONDS = 60;
@@ -576,12 +721,17 @@ function afterVisibleRefresh(){
   }, 50);
 }
 function showAppFor(user){
+  CURRENT_USER = user;
   sessionStorage.setItem("posadas2025_session", JSON.stringify({u:user, t:Date.now()}));
   sessionUserEl.textContent = "Conectado: " + user;
   enforceMenuAccess(user);
+  try{ applyUserViewRestrictions(user); }catch(_){}
   authGate.style.display = "none";
   appRoot.classList.remove('hidden');
- afterVisibleRefresh(); }
+  try{ refreshEquipoDepFilters(); }catch(_){}
+  try{ applyUserDefaultFiltersIfReady(); }catch(_){}
+  afterVisibleRefresh();
+}
 function logout(){ 
   sessionStorage.removeItem("posadas2025_session"); 
   setAttempts(0); setLockUntil(0); // limpia bloqueo
@@ -614,6 +764,105 @@ function updateLockoutUI(){
 }
 setInterval(updateLockoutUI, 1000);
 
+
+/* Aplica filtros por defecto según el usuario autenticado (dependencia / equipo) */
+const USER_FILTER_DEFAULTS = {
+  "COHESION":    { depMatch: "COHES",      equipoMatch: "COHES" },
+  "SDHYBC":      { depMatch: "SDHYBC",     equipoMatch: "SDHYBC" },
+  "VINCULACION": { depMatch: "VINCUL",     equipoMatch: "VINCUL" },
+  "VULNERABLES": { depMatch: "VULNERABLE", equipoMatch: "VULNERABLE" },
+  "ICHDII":      { depMatch: "ICHDII",     equipoMatch: "ICHDII" }
+};
+function getUserFilterDefaults(user){
+  return USER_FILTER_DEFAULTS[user] || null;
+}
+
+
+function restrictSelectToSingleValue(sel, value){
+  try{
+    if(!sel || !sel.options || !value) return;
+    const target = String(value).trim().toUpperCase();
+    for(let i = sel.options.length - 1; i >= 0; i--){
+      const opt = sel.options[i];
+      const val = String(opt.value || '').trim().toUpperCase();
+      if(val !== target){
+        sel.remove(i);
+      }
+    }
+    sel.value = value;
+  }catch(_){}
+}
+
+
+function applyUserDefaultFiltersIfReady(){
+  try{
+    if(!CURRENT_USER) return;
+
+    const cfg = getUserFilterDefaults(CURRENT_USER);
+    if(!cfg) return;
+
+    const isLimited = (typeof LIMITED_VIEW_USERS !== 'undefined') && LIMITED_VIEW_USERS.has(CURRENT_USER);
+    let changed = false;
+
+    const selDep = document.getElementById('calFilterDep');
+    if(selDep && selDep.options && selDep.options.length>1 && cfg.depMatch){
+      const target = cfg.depMatch.toUpperCase();
+      let matchVal = null;
+      for(const opt of selDep.options){
+        const val = String(opt.value||'').toUpperCase();
+        if(val.includes(target)){
+          matchVal = opt.value;
+          break;
+        }
+      }
+      if(matchVal){
+        selDep.value = matchVal;
+        CURRENT_CAL_DEP = matchVal;
+        changed = true;
+        if(isLimited){
+          restrictSelectToSingleValue(selDep, matchVal);
+        }
+      }
+    }
+
+    const selEq = document.getElementById('calFilterEquipo');
+    if(selEq && selEq.options && selEq.options.length>1 && cfg.equipoMatch){
+      const target = cfg.equipoMatch.toUpperCase();
+      let matchVal = null;
+      for(const opt of selEq.options){
+        const val = String(opt.value||'').toUpperCase();
+        if(val.includes(target)){
+          matchVal = opt.value;
+          break;
+        }
+      }
+      if(matchVal){
+        selEq.value = matchVal;
+        CURRENT_CAL_EQUIPO = matchVal;
+        changed = true;
+        // Nota: ya no se restringen las opciones del selector de equipo;
+        // el usuario ve todos los equipos de su dependencia.
+      }
+    }
+
+    // Meses y estado (opcional)
+    if(cfg.meses && cfg.meses.length){
+      CURRENT_CAL_MESES = [...cfg.meses];
+      changed = true;
+    }
+    if(cfg.status && cfg.status.length){
+      CURRENT_CAL_STATUS = [...cfg.status];
+      changed = true;
+    }
+
+    if(changed){
+      applyCalendarFilters();
+    }
+  }catch(_){}
+}
+
+
+
 /* === Login submit === */
 form.addEventListener('submit', async (e)=>{
   e.preventDefault();
@@ -645,10 +894,14 @@ form.addEventListener('submit', async (e)=>{
     if(!raw) return;
     const sess = JSON.parse(raw);
     if(sess && sess.u){
+      CURRENT_USER = sess.u;
       sessionUserEl.textContent = "Conectado: " + sess.u;
       enforceMenuAccess(sess.u);
+      try{ applyUserViewRestrictions(sess.u); }catch(_){}
       authGate.style.display = "none";
       appRoot.classList.remove('hidden');
+      try{ refreshEquipoDepFilters(); }catch(_){}
+      try{ applyUserDefaultFiltersIfReady(); }catch(_){}
     }
   }catch(_){}
 })();
@@ -931,6 +1184,8 @@ async function loadCSV(){
       r["R"]=row["R"]||row["r"]||"";
       r["NOMBRE"]=row["NOMBRE"]||row["Nombre"]||"";
       r["GRUPO"]=(row["GRUPO"]||row["Grupo"]||"").toString().toUpperCase().trim().replace(/["']/g,'');
+      r["EQUIPO"]=(row["EQUIPO"]||"").toString().toUpperCase().trim();
+      r["DEPENDENCIA"]=(row["DEPENDENCIA"]||"").toString().toUpperCase().trim();
       
     // Build ACTIVE_INSUMOS dynamically
     try{
@@ -1128,14 +1383,21 @@ function allowedStatusSet(){
   return set;
 }
 
+
 function mapRawEventsToFullCalendar(raw){
-  const filter=CURRENT_LEADER_FILTER_CALENDAR;
-  const targetCanon=canonicalCategory(filter);
-  const allowed=allowedStatusSet();
+  const filter = CURRENT_LEADER_FILTER_CALENDAR;
+  const targetCanon = canonicalCategory(filter);
+  const allowed = allowedStatusSet();
+
+  const user = (typeof CURRENT_USER === 'string') ? CURRENT_USER : null;
+  const limited = !!(user && typeof LIMITED_VIEW_USERS !== 'undefined' && LIMITED_VIEW_USERS && LIMITED_VIEW_USERS.has && LIMITED_VIEW_USERS.has(user));
+  const cfg = (limited && typeof getUserFilterDefaults === 'function') ? getUserFilterDefaults(user) : null;
+  const depMatch = cfg && cfg.depMatch ? String(cfg.depMatch).toUpperCase() : null;
+  const eqMatch  = cfg && cfg.equipoMatch ? String(cfg.equipoMatch).toUpperCase() : null;
 
   return raw.map(r=>{
-    const L=(r.lideres||'').split(/[;,]/).map(x=>x.trim()).filter(Boolean);
-    const evCanon=canonicalCategory(r.categoria_color);
+    const L = (r.lideres||'').split(/[;,]/).map(x=>x.trim()).filter(Boolean);
+    const evCanon = canonicalCategory(r.categoria_color);
     const color = (() => {
       const raw = (r.color_hex||'').toString().trim();
       const hex = raw ? (raw.startsWith('#') ? raw : '#'+raw) : '';
@@ -1143,28 +1405,59 @@ function mapRawEventsToFullCalendar(raw){
       return isHex ? hex : colorForLabel(r.categoria_color);
     })();
 
+    // Valor normalizado de dependencia y equipo
+    const depVal = String(r.dependencia||'').toUpperCase().trim().replace(/["']/g,'');
+    const eqVal  = String(r.equipo||'').toUpperCase();
+
     /* filtro por estructura (píldoras) */
-    if(filter!=='all' && evCanon!==targetCanon) return null;
+    if(filter !== 'all' && evCanon !== targetCanon) return null;
 
     /* filtro por estatus */
     if(allowed.size && !allowed.has((r.estatus||'').toUpperCase())) return null;
 
-    /* filtro por equipo (múltiples equipos soportados) */
-if(CURRENT_CAL_EQUIPO!=='all'){
-  const list = String(r.equipo||'')
-    .toUpperCase()
-    .split(/[,/|;–—\-&]+/)
-    .map(s=>s.trim())
-    .filter(Boolean);
-  if(!list.includes(String(CURRENT_CAL_EQUIPO||'').toUpperCase().trim())) return null;
-}
+    /* restricciones base por usuario limitado: solo ve su dependencia/equipo */
+    if(limited){
+      if(depMatch && !depVal.includes(depMatch)) return null;
 
-    /* filtro por dependencia */
-    if(CURRENT_CAL_DEP!=='all'){
-      if((r.dependencia||'').toUpperCase().trim() !== CURRENT_CAL_DEP.toUpperCase().trim()) return null;
+      if(eqMatch){
+        const eqList = eqVal
+          .split(/[,/|;–—\-&]+/)
+          .map(s=>s.trim())
+          .filter(Boolean);
+        const hasAllowed = eqList.some(eq=>eq.includes(eqMatch));
+        if(!hasAllowed) return null;
+      }
+
+      // dentro de su universo, respetar filtros actuales si no son "all"
+      if(CURRENT_CAL_DEP && CURRENT_CAL_DEP !== 'all'){
+        if(depVal !== String(CURRENT_CAL_DEP).toUpperCase().trim()) return null;
+      }
+
+      if(CURRENT_CAL_EQUIPO && CURRENT_CAL_EQUIPO !== 'all'){
+        const wanted = String(CURRENT_CAL_EQUIPO).toUpperCase().trim();
+        const list2 = eqVal
+          .split(/[,/|;–—\-&]+/)
+          .map(s=>s.trim())
+          .filter(Boolean);
+        if(!list2.includes(wanted)) return null;
+      }
+    }else{
+      /* filtro por equipo (múltiples equipos soportados) */
+      if(CURRENT_CAL_EQUIPO !== 'all'){
+        const list = eqVal
+          .split(/[,/|;–—\-&]+/)
+          .map(s=>s.trim())
+          .filter(Boolean);
+        if(!list.includes(String(CURRENT_CAL_EQUIPO||'').toUpperCase().trim())) return null;
+      }
+
+      /* filtro por dependencia */
+      if(CURRENT_CAL_DEP !== 'all'){
+        if(depVal !== String(CURRENT_CAL_DEP).toUpperCase().trim()) return null;
+      }
     }
 
-    const hora=r.hora;
+    const hora = r.hora;
     return {
       title: r.equipo || 'Posada',
       start: hora ? `${r.fecha}T${hora}:00` : r.fecha,
@@ -1180,13 +1473,18 @@ if(CURRENT_CAL_EQUIPO!=='all'){
     };
   }).filter(Boolean);
 }
-
 function refreshEquipoDepFilters(){
+  const user = (typeof CURRENT_USER === 'string') ? CURRENT_USER : null;
+  const limited = !!(user && typeof LIMITED_VIEW_USERS !== 'undefined' && LIMITED_VIEW_USERS && LIMITED_VIEW_USERS.has && LIMITED_VIEW_USERS.has(user));
+  const cfg = limited ? getUserFilterDefaults(user) : null;
+  const depMatch = cfg && cfg.depMatch ? String(cfg.depMatch).toUpperCase() : null;
+  const eqMatch  = cfg && cfg.equipoMatch ? String(cfg.equipoMatch).toUpperCase() : null;
+
   /* Equipo: desde OFFICIAL_TEAMS (o eventos si no hay lista) */
   const selEq = document.getElementById('calFilterEquipo');
   if(selEq){
     const cur = selEq.value || 'all';
-    selEq.innerHTML = '<option value="all">Todos</option>';
+    selEq.innerHTML = limited ? '' : '<option value="all">Todos</option>';
     let _teamsSet = new Set();
     if((OFFICIAL_TEAMS||[]).length){
       (OFFICIAL_TEAMS||[]).forEach(t=>_teamsSet.add(String(t).toUpperCase().trim()));
@@ -1199,28 +1497,93 @@ function refreshEquipoDepFilters(){
           .forEach(t=>_teamsSet.add(t));
       });
     }
-    [..._teamsSet].sort((a,b)=>a.localeCompare(b)).forEach(eq=>{
+    let teamsArr = [..._teamsSet].sort((a,b)=>a.localeCompare(b));
+
+    // Para usuarios de vista limitada: restringir equipos a su dependencia
+    if(limited){
+      let filteredByDep = [];
+      if(depMatch && typeof TEAMS_BY_DEPENDENCIA !== 'undefined' && TEAMS_BY_DEPENDENCIA && TEAMS_BY_DEPENDENCIA.size){
+        const depTarget = depMatch; // ya viene en mayúsculas
+        const allowed = new Set();
+        try{
+          TEAMS_BY_DEPENDENCIA.forEach((set, depName)=>{
+            const dn = String(depName||'').toUpperCase();
+            if(dn.includes(depTarget)){
+              set.forEach(eq=>allowed.add(String(eq).toUpperCase().trim()));
+            }
+          });
+        }catch(_){}
+        if(allowed.size){
+          filteredByDep = teamsArr.filter(eq=>allowed.has(eq));
+        }
+      }
+      if(filteredByDep.length){
+        teamsArr = filteredByDep;
+      }else if(eqMatch){
+        // Fallback: filtro por texto, como antes
+        teamsArr = teamsArr.filter(eq=>eq.includes(eqMatch));
+      }
+    }
+
+    let found = false;
+    teamsArr.forEach(eq=>{
       const opt=document.createElement('option');
       opt.value=eq; opt.textContent=eq;
-      if(eq===cur) opt.selected=true;
+      if(eq===cur){
+        opt.selected=true;
+        found = true;
+      }
       selEq.appendChild(opt);
     });
+
+    if(limited){
+      const first = selEq.options[0];
+      if(first){
+        if(!found){
+          first.selected = true;
+        }
+        CURRENT_CAL_EQUIPO = selEq.value || 'all';
+      }
+    }
   }
+
   /* Dependencia: desde eventos */
   const selDep = document.getElementById('calFilterDep');
   if(selDep){
     const cur = selDep.value || 'all';
-    const deps = Array.from(new Set((ALL_CALENDAR_EVENTS_RAW||[]).map(e=>(e.dependencia||'').toUpperCase().trim().replace(/["']/g,'')).filter(Boolean))).sort();
-    selDep.innerHTML = '<option value="all">Todas</option>';
+    let deps = Array.from(new Set(
+      (ALL_CALENDAR_EVENTS_RAW||[]).map(e=>String(e.dependencia||'').toUpperCase().trim().replace(/["']/g,''))
+        .filter(Boolean)
+    )).sort();
+
+    if(limited && depMatch){
+      deps = deps.filter(d=>d.includes(depMatch));
+    }
+
+    selDep.innerHTML = limited ? '' : '<option value="all">Todas</option>';
+
+    let foundDep = false;
     deps.forEach(d=>{
       const opt=document.createElement('option');
       opt.value=d; opt.textContent=d;
-      if(d===cur) opt.selected=true;
+      if(d===cur){
+        opt.selected=true;
+        foundDep = true;
+      }
       selDep.appendChild(opt);
     });
+
+    if(limited){
+      const firstDep = selDep.options[0];
+      if(firstDep){
+        if(!foundDep){
+          firstDep.selected = true;
+        }
+        CURRENT_CAL_DEP = selDep.value || 'all';
+      }
+    }
   }
 }
-
 
 function focusMapForEvent(ev){
   try{
@@ -1362,6 +1725,8 @@ function updateMonthKpis(){
 /* === Equipos / Integrantes === */
 let OFFICIAL_TEAMS = [];
 const MEMBERS_BY_TEAM = new Map();
+/* TEAMS_BY_DEPENDENCIA: mapa DEPENDENCIA_NORMALIZADA -> Set de EQUIPOS */
+const TEAMS_BY_DEPENDENCIA = new Map();
 const normTeam = (s)=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
 
 async function loadTeamsAndMembers() {
@@ -1371,7 +1736,7 @@ async function loadTeamsAndMembers() {
     const text=await res.text();
     const parsed=Papa.parse(text,{header:true,skipEmptyLines:true,transformHeader:h=>h.replace(/^\uFEFF/,'').trim().toLowerCase()});
     const rows=parsed.data||[];
-    OFFICIAL_TEAMS=[]; MEMBERS_BY_TEAM.clear();
+    OFFICIAL_TEAMS=[]; MEMBERS_BY_TEAM.clear(); TEAMS_BY_DEPENDENCIA.clear();
 
     rows.forEach(r=>{
       const eq=(r.equipo||"").toString().trim();
@@ -1381,9 +1746,18 @@ async function loadTeamsAndMembers() {
       const item={nombre:(r.nombre||"").toString().trim(),telefono:(r.telefono||"").toString().trim(),dependencia:(r.dependencia||r.colonia||"").toString().trim()};
       if(!MEMBERS_BY_TEAM.has(key)) MEMBERS_BY_TEAM.set(key,[]);
       if(item.nombre||item.telefono||item.dependencia){ MEMBERS_BY_TEAM.get(key).push(item); }
+
+      // Indexar equipo por dependencia normalizada
+      if(item.dependencia){
+        const depNorm=item.dependencia.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+        if(depNorm){
+          if(!TEAMS_BY_DEPENDENCIA.has(depNorm)) TEAMS_BY_DEPENDENCIA.set(depNorm,new Set());
+          TEAMS_BY_DEPENDENCIA.get(depNorm).add(eq);
+        }
+      }
     });
   }catch(e){
-    OFFICIAL_TEAMS=[]; MEMBERS_BY_TEAM.clear();
+    OFFICIAL_TEAMS=[]; MEMBERS_BY_TEAM.clear(); TEAMS_BY_DEPENDENCIA.clear();
   }
 }
 function fillEquipoSelectOptions(selectEl,currentValue){
@@ -1501,6 +1875,33 @@ function renderEventPanel(ev){
   const leaders = (ex.leaders||[]).filter(Boolean);
 
   container.innerHTML = `
+    <details id="leadersCard" class="mt-3 p-3 rounded-lg border border-gray-200 bg-white group" open>
+      <summary class="flex items-center justify-between cursor-pointer select-none"><span class="font-semibold">Líderes del evento</span><span class="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-800"><span id="leadersCount">0</span></span></summary>
+      <div id="leadersList" class="space-y-3"></div>
+      <div class="mt-3 flex items-center gap-3">
+        <button id="btnSaveCalls" class="btn">💾 Guardar llamadas</button>
+        <span id="saveCallsToast" class="text-sm text-gray-500"></span>
+      </div>
+    </details>
+    <!-- Tarjeta fija para coordinadores de Vinculación (solo usuarios limitados) -->
+    <div id="coordVincCard" class="mt-3 p-3 rounded-lg border border-gray-200 bg-white" style="display:none;">
+      <div class="text-sm font-semibold text-gray-800 mb-2">Coordinadores de Vinculación</div>
+      <ul class="text-sm text-gray-700 space-y-1">
+        <li>Erik Arturo Sias — <a href="tel:6141014556" class="text-blue-600 underline">6141014556</a></li>
+        <li>David Barraza Hernández — <a href="tel:6144757977" class="text-blue-600 underline">6144757977</a></li>
+      </ul>
+      <div class="mt-3">
+        <!-- Actualiza el href con la URL fija del formulario de registro de posadas -->
+        <a id="registroPosadasLink"
+   href="https://arcg.is/1HXWme6"
+   target="_blank"
+   rel="noopener"
+   class="text-sm font-medium text-blue-600 underline">
+  Abrir formulario de registro de posadas
+</a>
+
+      </div>
+    </div>
     <div class="grid grid-cols-2 gap-3">
       <div><div class="text-sm text-gray-500">ID</div><div class="font-semibold">${idEvento||"—"}</div></div>
       <div><div class="text-sm text-gray-500">Fecha</div><input id="fldFecha" type="date" value="${fechaISO}" class="w-full p-2 border rounded-lg"></div>
@@ -1524,14 +1925,7 @@ function renderEventPanel(ev){
       <div id="equipoMembersList" class="space-y-1 text-sm text-gray-700">—</div>
     </details>
 
-    <details id="leadersCard" class="mt-3 p-3 rounded-lg border border-gray-200 bg-white group">
-      <summary class="flex items-center justify-between cursor-pointer select-none"><span class="font-semibold">Líderes del evento</span><span class="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-800"><span id="leadersCount">0</span></span></summary>
-      <div id="leadersList" class="space-y-3"></div>
-      <div class="mt-3 flex items-center gap-3">
-        <button id="btnSaveCalls" class="btn">💾 Guardar llamadas</button>
-        <span id="saveCallsToast" class="text-sm text-gray-500"></span>
-      </div>
-    </details>
+    
 
     <!-- NUEVO: Checklist por evento -->
     <div class="mt-3 p-3 rounded-lg border border-gray-200 bg-gray-50" id="checklistCard">
@@ -1550,6 +1944,25 @@ function renderEventPanel(ev){
       <span id="saveToast" class="text-sm text-gray-500"></span>
     </div>
   `;
+
+  // Control de paneles según el usuario conectado:
+  // Usuarios con vista limitada (COHESION, SDHYBC, VINCULACION, VULNERABLES, ICHDII)
+  // ven solo la tarjeta fija de coordinadores (#coordVincCard) y no la tarjeta de líderes (#leadersCard).
+  const leadersCardEl = container.querySelector('#leadersCard');
+  const coordVincCardEl = container.querySelector('#coordVincCard');
+  const isLimitedUserForPanel = (typeof CURRENT_USER === 'string')
+    && (typeof LIMITED_VIEW_USERS !== 'undefined')
+    && LIMITED_VIEW_USERS
+    && typeof LIMITED_VIEW_USERS.has === 'function'
+    && LIMITED_VIEW_USERS.has(CURRENT_USER);
+
+  if (isLimitedUserForPanel) {
+    if (leadersCardEl) leadersCardEl.style.display = 'none';
+    if (coordVincCardEl) coordVincCardEl.style.display = '';
+  } else {
+    if (leadersCardEl) leadersCardEl.style.display = '';
+    if (coordVincCardEl) coordVincCardEl.style.display = 'none';
+  }
 
   /* Equipo */
   const selEquipo=container.querySelector("#fldEquipo");
@@ -1638,7 +2051,7 @@ function renderEventPanel(ev){
   });
 
   
-  // === Insumos de la posada (Hoja 1) — solo lectura ===
+  // === Insumos de la posada — solo lectura ===
   try {
     const insCardId = 'insumosHoja1Card';
     let insCard = container.querySelector('#'+insCardId);
@@ -1649,7 +2062,7 @@ function renderEventPanel(ev){
       insCard.innerHTML = `
         <div class="flex items-center justify-between mb-2">
           <div>
-            <div class="font-semibold">Insumos de la posada (Hoja 1)</div>
+            <div class="font-semibold">Insumos de la posada </div>
             <div class="text-xs text-gray-500">Suma de insumos por líder(es) en Hoja 1 — solo lectura.</div>
           </div>
         </div>
@@ -1932,15 +2345,48 @@ function setLeaderFilter(leader){
   applyFilters(); applyCalendarFilters(); refreshMapMarkers(); updateMonthKpis(); updateLeaderCallKPIs();
 }
 function applyFilters(){
-  const term=(document.getElementById("searchInput").value||"").toLowerCase().trim();
-  const sel=CURRENT_LEADER_FILTER;
-  VIEW_ROWS=ALL_ROWS.filter(r=>{
-    const okLeader=(sel==="all")||(canonicalCategory(r["GRUPO"])===canonicalCategory(sel));
-    const okTerm=!term||(r["NOMBRE"]||"").toLowerCase().includes(term);
-    return okLeader&&okTerm;
+  const term = (document.getElementById("searchInput").value||"").toLowerCase().trim();
+  const sel  = CURRENT_LEADER_FILTER;
+  const depFilter  = (typeof CURRENT_CAL_DEP!=="undefined" && CURRENT_CAL_DEP) ? CURRENT_CAL_DEP : 'all';
+  const teamFilter = (typeof CURRENT_CAL_EQUIPO!=="undefined" && CURRENT_CAL_EQUIPO) ? CURRENT_CAL_EQUIPO : 'all';
+
+  const norm = s => String(s||'')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .toUpperCase()
+    .trim();
+
+  const depFilterCanon = norm(depFilter);
+
+  VIEW_ROWS = ALL_ROWS.filter(r=>{
+    const okLeader = (sel==="all") || (canonicalCategory(r["GRUPO"])===canonicalCategory(sel));
+    const okTerm   = !term || (r["NOMBRE"]||"").toLowerCase().includes(term);
+
+    let okDep = true;
+    if(depFilter !== 'all'){
+      const depSource = r["DEPENDENCIA"] || r["GRUPO"] || r["EQUIPO"] || "";
+      const depRowCanon = norm(depSource);
+      okDep = depRowCanon.includes(depFilterCanon) || depFilterCanon.includes(depRowCanon);
+    }
+
+    let okTeam = true;
+    if(teamFilter !== 'all'){
+      const list = String(r["EQUIPO"]||'')
+        .toUpperCase()
+        .split(/[,/|;–—\-&]+/)
+        .map(s=>s.trim())
+        .filter(Boolean);
+      okTeam = list.includes(teamFilter.toUpperCase().trim());
+    }
+
+    return okLeader && okTerm && okDep && okTeam;
   });
-  renderInsumosKPIs(VIEW_ROWS); renderTable(VIEW_ROWS); updateExecutiveMetrics(VIEW_ROWS);
+
+  renderInsumosKPIs(VIEW_ROWS);
+  renderTable(VIEW_ROWS);
+  updateExecutiveMetrics(VIEW_ROWS);
 }
+
 function populateLeaderPills(rows){
   const cont = document.getElementById("leader-pills-container");
   if(!cont){ return; }
@@ -2026,7 +2472,17 @@ function updateExecutiveMetrics(rows){
 }
 
 /* ==================== SYNC CALENDARIO ==================== */
-function applyCalendarFilters(){ if(calendarInstance){ calendarInstance.refetchEvents(); updateMonthKpis(); } }
+function applyCalendarFilters(){
+  if(calendarInstance){
+    calendarInstance.refetchEvents();
+    updateMonthKpis();
+  }
+  /* Aplicar mismo filtro global al resto de la página */
+  try{ applyFilters(); }catch(_){}
+  try{
+    refreshMapMarkers();
+  }catch(_){}
+}
 
 /* ==================== MAPA ==================== */
 let map, clusterGroup, heatLayer, hullLayerGroup, userMarker, allMapPoints = [];
@@ -2076,11 +2532,11 @@ async function loadMapData(){
   });
   const rows = parsed.data || [];
 
-  allMapPoints = rows.map(r=>{
-    const lat = parseWeirdCoord(r["LATITUD"], true);
+  allMapPoints = rows.map(r=>{    const lat = parseWeirdCoord(r["LATITUD"], true);
     const lng = parseWeirdCoord(r["LONGITUD"]||r["LONGUITUD"], false);
     const estructura = (r["ESTRUCTU"]||r["ESTRUCTURA"]||"").toString().toUpperCase().trim();
     const nombre = r["NOMBRE"]||"";
+    const dependenciaRaw = (r["DEPENDENCIA"]||r["ESTRUCTURA"]||r["ESTRUCTU"]||r["EQUIPO"]||"").toString().toUpperCase().trim();
     return {
       id: r["ID"]||"", nombre, estructura,
       telefono: r["TELEFONO"]||"",
@@ -2088,7 +2544,8 @@ async function loadMapData(){
       nota: r["NOTA"]||"",
       lat, lng,
       colonia: (r["COLONIA"]||"").toString().toUpperCase().trim(),
-      equipo: (r["EQUIPO"]||"").toString().trim()
+      equipo: (r["EQUIPO"]||"").toString().trim(),
+      dependencia: dependenciaRaw
     };
   }).filter(p => typeof p.lat==="number" && typeof p.lng==="number" && !isNaN(p.lat) && !isNaN(p.lng));
 
@@ -2102,9 +2559,37 @@ function refreshMapMarkers(){
   if(heatLayer){ map.removeLayer(heatLayer); heatLayer=null; }
 
   const sel = CURRENT_LEADER_FILTER;
-  const markers=[], heatPoints=[];
+  const depFilter  = (typeof CURRENT_CAL_DEP!=="undefined" && CURRENT_CAL_DEP) ? CURRENT_CAL_DEP : 'all';
+  const teamFilter = (typeof CURRENT_CAL_EQUIPO!=="undefined" && CURRENT_CAL_EQUIPO) ? CURRENT_CAL_EQUIPO : 'all';
+
+  const norm = s => String(s||'')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .toUpperCase()
+    .trim();
+
+  const depFilterCanon  = norm(depFilter);
+  const teamFilterCanon = norm(teamFilter);
+
+  const markers = [], heatPoints = [];
   allMapPoints.forEach(p=>{
     if(!(sel==='all' || canonicalCategory(p.estructura)===canonicalCategory(sel))) return;
+
+    if(teamFilter !== 'all'){
+      const list = String(p.equipo||'')
+        .split(/[,/|;–—\-&]+/)
+        .map(s=>norm(s))
+        .filter(Boolean);
+      const hasTeam = list.some(t => t.includes(teamFilterCanon) || teamFilterCanon.includes(t));
+      if(!hasTeam) return;
+    }
+
+    if(depFilter !== 'all'){
+      const depSource = p.dependencia || p.estructura || p.equipo || "";
+      const depCanon  = norm(depSource);
+      const okDep = depCanon.includes(depFilterCanon) || depFilterCanon.includes(depCanon);
+      if(!okDep) return;
+    }
 
     const realizada = isRealizada2025(p.estatus);
     const color = realizada ? '#16a34a' : '#dc2626';
@@ -2126,17 +2611,38 @@ function refreshMapMarkers(){
   }
 }
 function toggleHeat(){ if(!map || !heatLayer) return; if(map.hasLayer(heatLayer)) map.removeLayer(heatLayer); else map.addLayer(heatLayer); }
+()=>{ if(!map || !heatLayer) return; if(map.hasLayer(heatLayer)) map.removeLayer(heatLayer); else map.addLayer(heatLayer); }
 function drawHulls(){
   hullLayerGroup.clearLayers();
   const keyField = allMapPoints.some(p=>p.equipo) ? 'equipo' : 'estructura';
   const groups = {};
   const sel = CURRENT_LEADER_FILTER;
+  const depFilter  = (typeof CURRENT_CAL_DEP!=="undefined" && CURRENT_CAL_DEP) ? CURRENT_CAL_DEP : 'all';
+  const teamFilter = (typeof CURRENT_CAL_EQUIPO!=="undefined" && CURRENT_CAL_EQUIPO) ? CURRENT_CAL_EQUIPO : 'all';
+
   allMapPoints.forEach(p=>{
     if(!(sel==='all' || canonicalCategory(p.estructura)===canonicalCategory(sel))) return;
-    const k=(p[keyField]||'').toString().trim(); if(!k) return;
-    if(!groups[k]) groups[k]=[];
+
+    if(teamFilter !== 'all'){
+      const list = String(p.equipo||'')
+        .toUpperCase()
+        .split(/[,/|;–—\-&]+/)
+        .map(s=>s.trim())
+        .filter(Boolean);
+      if(!list.includes(teamFilter.toUpperCase().trim())) return;
+    }
+
+    if(depFilter !== 'all'){
+      const depP = String(p.dependencia||'').toUpperCase().trim();
+      if(depP !== depFilter.toUpperCase().trim()) return;
+    }
+
+    const k = (p[keyField]||'').toString().trim();
+    if(!k) return;
+    if(!groups[k]) groups[k] = [];
     groups[k].push([p.lng,p.lat]);
   });
+
   Object.entries(groups).forEach(([k,coords])=>{
     if(coords.length<3) return;
     const fc = turf.featureCollection(coords.map(c=>turf.point(c)));
@@ -2461,6 +2967,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     setLeaderFilter('all');        // Inicializar filtros y aplicar vista
     setActiveDay(new Date());
     updateMonthKpis();
+    try{ applyUserDefaultFiltersIfReady(); }catch(_){}
   }catch(e){
     console.error(e);
     document.getElementById("error-message").classList.remove("hidden");
@@ -2468,8 +2975,6 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     document.getElementById("loading").classList.add("hidden");
   }
 });
-
-/* Compat */
 function initPosadas(){ /* intencionalmente vacío */ }
 </script>
 
@@ -2536,6 +3041,7 @@ function applyCalendarFilters(){
     window.CURRENT_CAL_DEP    = fs.dep   || 'all';
     window.CURRENT_CAL_MUN    = fs.mun   || 'all';
     window.CURRENT_LEADER_FILTER_CALENDAR = fs.leader || 'all';
+
     if(window.calendarInstance){
       const events = calendarInstance.getEvents();
       for(const ev of events){
@@ -2548,11 +3054,18 @@ function applyCalendarFilters(){
         if(ev.el) ev.el.style.display = show ? '' : 'none';
       }
     }
+
     if(typeof refreshMapByFilters==='function'){ refreshMapByFilters(fs); }
     if(typeof updateChartsByFilters==='function'){ updateChartsByFilters(fs); }
     if(typeof updateMonthKpis==='function'){ updateMonthKpis(); }
+
+    /* Además: sincronizar filtros globales con insumos y mapa */
+    try{ applyFilters(); }catch(_){}
+    try{ refreshMapMarkers(); }catch(_){}
+    try{ drawHulls(); }catch(_){}
   }catch(err){ console.error('applyCalendarFilters()', err); }
 }
+
 function refreshMapByFilters(fs){
   try{
     if(typeof markersLayer==='undefined' || !markersLayer) return;
@@ -2865,7 +3378,38 @@ if(typeof setSolicitudesKpi==='function' && !window._solPatch){
     leadersCard.style.display="none";
   }
 
-  function run(){ leadersToChecklist(); paintCoordinator(); }
+  function isLimitedViewUser(){
+    try{
+      const u = (typeof window.CURRENT_USER==='string') ? window.CURRENT_USER : null;
+      if(!u) return false;
+      if(window.LIMITED_VIEW_USERS && typeof window.LIMITED_VIEW_USERS.has === 'function'){
+        return window.LIMITED_VIEW_USERS.has(u);
+      }
+      return false;
+    }catch(_){
+      return false;
+    }
+  }
+
+  function run(){
+    const limited = isLimitedViewUser();
+    if(!limited){
+      // Vista completa: líderes + checklist + coordinador
+      leadersToChecklist();
+    }else{
+      // Vista limitada: ocultar panel de "Líderes del evento" (llamadas)
+      try{
+        const panel = getPanel();
+        if(panel){
+          const titleLeaders=[...panel.querySelectorAll("h1,h2,h3,h4,strong,div,span")].find(n=>hasTxt(n,"Líderes del evento"));
+          const leadersCard = titleLeaders && (titleLeaders.closest(".card, .shadow, .rounded, .rounded-xl, .panel, .box, .border, .p-4, .p-3, .p-2, section, div") || titleLeaders.parentElement);
+          if(leadersCard) leadersCard.style.display="none";
+        }
+      }catch(_){}
+    }
+    // En todos los casos mostrar el coordinador del equipo
+    paintCoordinator();
+  }
 
   // Observa solo el panel si existe, o el body hasta que aparezca
   let target = getPanel() || document.body;
@@ -2975,10 +3519,10 @@ if(typeof setSolicitudesKpi==='function' && !window._solPatch){
   window.renderEventPanel = function(ev){ if(typeof _origRender==='function') _origRender(ev);
     try{ const cont = byId('drawer')?.querySelector('.bd'); if(!cont) return;
       let leaders = ev?.extendedProps?.leaders; if(!Array.isArray(leaders)) leaders=[]; leaders=leaders.filter(Boolean);
-      let top = byId('leadersTop'); if(!top){ top=document.createElement('div'); top.id='leadersTop'; top.className='mb-2 p-3 rounded-lg border border-gray-200 bg-white';
-        top.innerHTML='<div id="leadersTopTitle" class="font-extrabold text-gray-800 mb-1"></div><div id="leadersTopBody" class="text-sm text-gray-700"></div>';
-        cont.prepend(top);
-      }
+      //let top = byId('leadersTop'); if(!top){ top=document.createElement('div'); top.id='leadersTop'; top.className='mb-2 p-3 rounded-lg border border-gray-200 bg-white';
+        //top.innerHTML='<div id="leadersTopTitle" class="font-extrabold text-gray-800 mb-1"></div><div id="leadersTopBody" class="text-sm text-gray-700"></div>';
+        //cont.prepend(top);
+      //}
       const titleEl=byId('leadersTopTitle'), bodyEl=byId('leadersTopBody');
       if(titleEl) titleEl.textContent = leaders.length>1? 'Líderes del evento':'Líder del evento';
       if(bodyEl){ bodyEl.innerHTML = leaders.map((name)=>{ const info=(typeof window.findLeaderRecordByName==='function')?(findLeaderRecordByName(name)||{}):{};
@@ -3111,4 +3655,3 @@ if(typeof setSolicitudesKpi==='function' && !window._solPatch){
 })();
 </script>
 </body>
-</html>
