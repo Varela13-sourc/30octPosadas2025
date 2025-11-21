@@ -1,11 +1,24 @@
 <!DOCTYPE html>
 <!--
-Resumen de cambios (27-Oct-2025):
-- Login sin refrescar.
-- Click de evento centra mapa y abre panel.
-- Insumos dinámicos (TINACOS, KITS ESTUFAS, ELECTRODOMESTICOS) y corrección de COBILAS.
-- Nuevo: secciones desplegables (Integrantes del equipo, Líderes del evento) con contador.
+Resumen de cambios:
+- 27-Oct-2025: Login sin refrescar; click de evento centra mapa y abre panel.
+- 27-Oct-2025: Insumos dinámicos (TINACOS, KITS ESTUFAS, ELECTRODOMESTICOS) y corrección de COBILAS.
+- 27-Oct-2025: Secciones desplegables (Integrantes del equipo, Líderes del evento) con contador.
+- 21-Nov-2025: Lectura de USUARIO REGISTRO, DISTRITO FEDERAL y DISTRITO LOCAL desde la hoja "Calendario".
+- 21-Nov-2025: Link de registro actualizado a Survey123 y visualización del código de usuario por posada.
+- 21-Nov-2025: Distritos federal y local visibles en el panel lateral de la posada.
+
+Supuestos:
+- El CSV "Calendario" incluye las columnas: USUARIO REGISTRO, DISTRITO FEDERAL, DISTRITO LOCAL.
+- Papa.parse transforma encabezados a minúsculas con trim; los nombres en el código consideran variantes.
+- El entorno tiene acceso de solo lectura a los CSV publicados de Google Sheets.
+
+Instrucciones rápidas:
+- Para actualizar datos, edita directamente la hoja "Calendario" (incluyendo usuario_registro y distritos).
+- Haz clic en una posada del calendario para ver el panel lateral con coordinadores, código de usuario y distritos.
+- Usa el botón "Abrir formulario de registro de posadas" y copia el código de usuario mostrado debajo en el Survey123.
 -->
+
 
 <html lang="es">
 <head> 
@@ -1323,6 +1336,9 @@ async function loadCalendarData(){
       responsable: clean(r.responsable),
       nota: clean(r.nota || r.notas),
       telefono: clean(r.telefono||""),
+      usuario_registro: clean(r["usuario registro"] || r.usuario_registro || r.usuarioregistro || ""),
+      distrito_federal: clean(r["distrito federal"] || r.distrito_federal || r.distritofederal || ""),
+      distrito_local:   clean(r["distrito local"]   || r.distrito_local   || r.distritolocal   || ""),
       dependencia: clean(r.dependencia||"")  /* <-- dependencia para filtro (ichdii, vinculación, cohesión, etc.) */
     };
   }).filter(Boolean);
@@ -1468,7 +1484,8 @@ function mapRawEventsToFullCalendar(raw){
       extendedProps:{
         id:r.id, team:r.equipo, leaders:L, fechaISO:r.fecha, hora,
         estatus:r.estatus, ubicacion:r.ubicacion, responsable:r.responsable, nota:r.nota,
-        categoria:r.categoria_color, telefono:r.telefono, dependencia:r.dependencia, colorHex:color
+        categoria:r.categoria_color, telefono:r.telefono, dependencia:r.dependencia, colorHex:color,
+        usuarioRegistro:r.usuario_registro, distritoFederal:r.distrito_federal, distritoLocal:r.distrito_local
       }
     };
   }).filter(Boolean);
@@ -1893,13 +1910,18 @@ function renderEventPanel(ev){
       <div class="mt-3">
         <!-- Actualiza el href con la URL fija del formulario de registro de posadas -->
         <a id="registroPosadasLink"
-   href="https://arcg.is/1HXWme6"
+   href="https://survey123.arcgis.com/share/3ec17097cebf4acfabb54e25292b764c"
    target="_blank"
    rel="noopener"
    class="text-sm font-medium text-blue-600 underline">
   Abrir formulario de registro de posadas
 </a>
-
+        <div class="mt-2 text-xs text-gray-600">
+          Código de usuario para esta posada:
+          <span class="font-mono font-semibold text-gray-900">
+            ${ex.usuarioRegistro || "—"}
+          </span>
+        </div>
       </div>
     </div>
     <div class="grid grid-cols-2 gap-3">
@@ -1914,6 +1936,17 @@ function renderEventPanel(ev){
         </select>
       </div>
       <div><div class="text-sm text-gray-500">Equipo</div><select id="fldEquipo" class="w-full p-2 border rounded-lg"></select></div>
+    </div>
+
+    <div class="mt-3 grid grid-cols-2 gap-3">
+      <div>
+        <div class="text-sm text-gray-500">Distrito federal</div>
+        <div class="text-sm font-semibold">${ex.distritoFederal || "—"}</div>
+      </div>
+      <div>
+        <div class="text-sm text-gray-500">Distrito local</div>
+        <div class="text-sm font-semibold">${ex.distritoLocal || "—"}</div>
+      </div>
     </div>
 
     <div class="mt-3"><div class="text-sm text-gray-500 mb-1">Nota</div>
