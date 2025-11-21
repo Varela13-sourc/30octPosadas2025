@@ -1883,6 +1883,7 @@ async function saveEventChecklist(id, items){
 /* === Drawer: panel con llamadas, ficha, equipo, checklist === */
 function renderEventPanel(ev){
   const ex=ev.extendedProps||{};
+  const isLimitedUser = LIMITED_VIEW_USERS && LIMITED_VIEW_USERS.has && LIMITED_VIEW_USERS.has(CURRENT_USER);
   const idEvento=ex.id||"";
   const equipoActual=ex.team||"";
   const fechaISO=ex.fechaISO || (ev.start?ev.start.toISOString().slice(0,10):"");
@@ -1938,6 +1939,7 @@ function renderEventPanel(ev){
       <div><div class="text-sm text-gray-500">Equipo</div><select id="fldEquipo" class="w-full p-2 border rounded-lg"></select></div>
     </div>
 
+    ${ isLimitedUser ? "" : `
     <div class="mt-3 grid grid-cols-2 gap-3">
       <div>
         <div class="text-sm text-gray-500">Distrito federal</div>
@@ -1948,6 +1950,7 @@ function renderEventPanel(ev){
         <div class="text-sm font-semibold">${ex.distritoLocal || "—"}</div>
       </div>
     </div>
+    `}
 
     <div class="mt-3"><div class="text-sm text-gray-500 mb-1">Nota</div>
       <textarea id="fldNotas" rows="3" class="w-full p-2 border rounded-lg" placeholder="Notas...">${ex.nota||""}</textarea>
