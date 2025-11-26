@@ -1339,6 +1339,7 @@ async function loadCalendarData(){
       usuario_registro: clean(r["usuario registro"] || r.usuario_registro || r.usuarioregistro || ""),
       distrito_federal: clean(r["distrito federal"] || r.distrito_federal || r.distritofederal || ""),
       distrito_local:   clean(r["distrito local"]   || r.distrito_local   || r.distritolocal   || ""),
+      colonia: clean(r.colonia || r.COLONIA || ""),
       dependencia: clean(r.dependencia||"")  /* <-- dependencia para filtro (ichdii, vinculación, cohesión, etc.) */
     };
   }).filter(Boolean);
@@ -1485,7 +1486,8 @@ function mapRawEventsToFullCalendar(raw){
         id:r.id, team:r.equipo, leaders:L, fechaISO:r.fecha, hora,
         estatus:r.estatus, ubicacion:r.ubicacion, responsable:r.responsable, nota:r.nota,
         categoria:r.categoria_color, telefono:r.telefono, dependencia:r.dependencia, colorHex:color,
-        usuarioRegistro:r.usuario_registro, distritoFederal:r.distrito_federal, distritoLocal:r.distrito_local
+        usuarioRegistro:r.usuario_registro, distritoFederal:r.distrito_federal, distritoLocal:r.distrito_local,
+        colonia:r.colonia
       }
     };
   }).filter(Boolean);
@@ -1924,6 +1926,10 @@ function renderEventPanel(ev){
           </span>
         </div>
       </div>
+    </div>
+    <div class="mt-3">
+      <div class="text-sm text-gray-500">Colonia del evento</div>
+      <div class="text-sm font-semibold">${ex.colonia || "—"}</div>
     </div>
     <div class="grid grid-cols-2 gap-3">
       <div><div class="text-sm text-gray-500">ID</div><div class="font-semibold">${idEvento||"—"}</div></div>
