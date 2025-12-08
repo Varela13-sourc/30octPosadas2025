@@ -567,6 +567,10 @@ const CREDS = {
 /* Usuarios con acceso a “Dirección de Acción Territorial” */
 const DAT_ALLOWED = new Set(["admin","DIRECTORCCG01","Varela13","SubAlan"]);
 /* Usuarios con vista limitada (solo calendario, sin tableros avanzados) */
+/* Usuarios con vista extendida (distritos + estado de llamada detallado) */
+const EXTENDED_DIPUTADOS_CALL_USERS = new Set([
+  "Varela13","DIRECTORCCG01","SubAlan","visitante","RafaL","AlphaIsabel"
+]);
 const LIMITED_VIEW_USERS = new Set(["COHESION","SDHYBC","VINCULACION","VULNERABLES","ICHDII"]);
 
 /* Cache de elementos que se ocultarán para vista limitada */
@@ -1339,6 +1343,7 @@ async function loadCalendarData(){
       usuario_registro: clean(r["usuario registro"] || r.usuario_registro || r.usuarioregistro || ""),
       distrito_federal: clean(r["distrito federal"] || r.distrito_federal || r.distritofederal || ""),
       distrito_local:   clean(r["distrito local"]   || r.distrito_local   || r.distritolocal   || ""),
+      diputado_local:   clean(r["diputado local"]   || r.diputado_local   || r.diputadolocal   || ""),
       colonia: clean(r.colonia || r.COLONIA || ""),
       dependencia: clean(r.dependencia||"")  /* <-- dependencia para filtro (ichdii, vinculación, cohesión, etc.) */
     };
@@ -1487,6 +1492,8 @@ function mapRawEventsToFullCalendar(raw){
         estatus:r.estatus, ubicacion:r.ubicacion, responsable:r.responsable, nota:r.nota,
         categoria:r.categoria_color, telefono:r.telefono, dependencia:r.dependencia, colorHex:color,
         usuarioRegistro:r.usuario_registro, distritoFederal:r.distrito_federal, distritoLocal:r.distrito_local,
+        diputadoLocal:r.diputado_local,
+        estadoLlamadaDipLocal:r.estado_llamada_dip_local,
         colonia:r.colonia
       }
     };
@@ -1803,7 +1810,8 @@ function findLeaderRecordByName(name){
         ficha: r["FICHA_URL"]||'',
         llamada: yesish(r["LLAMADA_2025"]),
         llamada_fecha: r["LLAMADA_FECHA"]||'',
-        llamada_nota: r["LLAMADA_NOTA"]||''
+        llamada_nota: r["LLAMADA_NOTA"]||'',
+        llamada_status: (r["LLAMADA_STATUS"] || r["LLAMADA ESTADO"] || "").toString().trim().toUpperCase()
       };
     }
   }
@@ -1886,6 +1894,13 @@ async function saveEventChecklist(id, items){
 function renderEventPanel(ev){
   const ex=ev.extendedProps||{};
   const isLimitedUser = LIMITED_VIEW_USERS && LIMITED_VIEW_USERS.has && LIMITED_VIEW_USERS.has(CURRENT_USER);
+  const hasExtendedUser = EXTENDED_DIPUTADOS_CALL_USERS && EXTENDED_DIPUTADOS_CALL_USERS.has && EXTENDED_DIPUTADOS_CALL_USERS.has(CURRENT_USER);
+  const distritoFedLabel = ex.distritoFederal || "—";
+  const baseDistritoLocal = ex.distritoLocal || "—";
+  const distritoLocalDisplay = (hasExtendedUser && ex.diputadoLocal)
+    ? `${baseDistritoLocal} – ${ex.diputadoLocal}`
+    : baseDistritoLocal;
+  const dipLocalStatusRaw = (ex.estadoLlamadaDipLocal || "").toString().toUpperCase();
   const idEvento=ex.id||"";
   const equipoActual=ex.team||"";
   const fechaISO=ex.fechaISO || (ev.start?ev.start.toISOString().slice(0,10):"");
@@ -1949,14 +1964,26 @@ function renderEventPanel(ev){
     <div class="mt-3 grid grid-cols-2 gap-3">
       <div>
         <div class="text-sm text-gray-500">Distrito federal</div>
-        <div class="text-sm font-semibold">${ex.distritoFederal || "—"}</div>
+        <div class="text-sm font-semibold">${distritoFedLabel}</div>
       </div>
       <div>
         <div class="text-sm text-gray-500">Distrito local</div>
-        <div class="text-sm font-semibold">${ex.distritoLocal || "—"}</div>
+        <div class="text-sm font-semibold">${distritoLocalDisplay}</div>
       </div>
     </div>
     `}
+
+    ${ (!isLimitedUser && hasExtendedUser && ex.diputadoLocal) ? `
+    <div class="mt-3">
+      <div class="text-sm text-gray-500 mb-1">Estado de llamada al diputado local</div>
+      <select id="fldEstadoLlamadaDipLocal" class="w-full p-2 border rounded-lg text-sm">
+        <option value="" ${dipLocalStatusRaw==="" ? "selected" : ""}>Seleccionar…</option>
+        <option value="SI" ${dipLocalStatusRaw==="SI" ? "selected" : ""}>Sí se le marcó</option>
+        <option value="NO" ${dipLocalStatusRaw==="NO" ? "selected" : ""}>No se le marcó</option>
+        <option value="NO_NECESARIO" ${dipLocalStatusRaw==="NO_NECESARIO" ? "selected" : ""}>No es necesario</option>
+      </select>
+    </div>
+    ` : "" }
 
     <div class="mt-3"><div class="text-sm text-gray-500 mb-1">Nota</div>
       <textarea id="fldNotas" rows="3" class="w-full p-2 border rounded-lg" placeholder="Notas...">${ex.nota||""}</textarea>
@@ -2012,52 +2039,121 @@ function renderEventPanel(ev){
   renderMembersForEquipo(container, selEquipo.value || equipoActual);
   selEquipo.addEventListener('change',()=>renderMembersForEquipo(container, selEquipo.value));
 
-  /* Líderes + llamadas + LLAMADA_NOTA */
+  
+  /* Líderes + llamadas + LLAMADA_NOTA (+ estado detallado para usuarios extendidos) */
   const leadersList = container.querySelector('#leadersList');
+  const hasExtendedUserCalls = false; // líderes usan checkbox tradicional; estado detallado se usa solo para diputado local
+
   leadersList.innerHTML = leaders.map(name=>{
     const info = findLeaderRecordByName(name) || {};
-     const lc=document.getElementById("leadersCount"); if(lc) lc.textContent = leaders.length;const tel  = info.tel ? `<a class="underline text-blue-600" href="tel:${info.tel}">${info.tel}</a>` : '—';
+    const lc = document.getElementById("leadersCount");
+    if (lc) lc.textContent = String(leaders.length);
+
+    const telHtml = info.tel
+      ? `<a class="text-blue-600" href="tel:${info.tel}">${info.tel}</a>`
+      : '—';
     const checked = info.llamada ? 'checked' : '';
     const nota = info.llamada_nota || '';
-    const fichaBtn = info.ficha ? `<button data-ficha="${encodeURIComponent(info.ficha)}" class="btn">📄 Ficha Lider</button>` : '';
+    const fichaBtn = info.ficha
+      ? `<button data-ficha="${encodeURIComponent(info.ficha)}" class="btn">📄 Ficha Lider</button>`
+      : '';
     const rid = info.rid || '';
+    const safeName = (name || '').replace(/"/g,'&quot;');
+    const status = (info.llamada_status || '').toString().toUpperCase();
+
+    let callControlHtml = '';
+    if (hasExtendedUserCalls) {
+      const opt = (val, label) => `<option value="${val}" ${status===val?'selected':''}>${label}</option>`;
+      callControlHtml = `
+        <label class="block text-xs text-gray-700 mb-1">Estado de llamada</label>
+        <select class="leader-call-status border rounded px-2 py-1 text-xs"
+                data-rid="${rid}" data-nombre="${safeName}">
+          ${opt('', 'Seleccionar…')}
+          ${opt('SI','Sí se le marcó')}
+          ${opt('NO','No se le marcó')}
+          ${opt('NO_NECESARIO','No es necesario')}
+        </select>`;
+    } else {
+      callControlHtml = `
+        <label class="inline-flex items-center gap-1 text-xs">
+          <input type="checkbox" class="leader-call" data-rid="${rid}" data-nombre="${safeName}" ${checked}> Llamada
+        </label>`;
+    }
+
     return `
       <div class="p-2 border rounded-lg">
-        <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center justify-between">
           <div>
-            <div class="font-semibold">${name}</div>
-            <div class="text-sm text-gray-600">Tel: ${tel}</div>
+            <div class="font-semibold text-sm">${safeName}</div>
+            <div class="text-xs text-gray-600">Tel: ${telHtml}</div>
           </div>
-          <div class="flex items-center gap-2">
-            <label class="inline-flex items-center gap-1 text-sm">
-              <input type="checkbox" class="leader-call" data-rid="${rid}" data-nombre="${name.replace(/"/g,'&quot;')}" ${checked}> Llamada
-            </label>
+          <div class="text-right space-y-1">
+            ${callControlHtml}
             ${fichaBtn}
           </div>
         </div>
         <div class="mt-2">
-          <input type="text" class="leader-note w-full p-2 border rounded-lg" data-rid="${rid}" placeholder="Nota (opcional)" value="${nota.replace(/"/g,'&quot;')}">
+          <input type="text"
+                 class="leader-note w-full border rounded px-2 py-1 text-xs"
+                 data-rid="${rid}"
+                 placeholder="Nota (opcional)"
+                 value="${nota.replace(/"/g,'&quot;')}">
         </div>
       </div>`;
-  }).join('') || `<div class="text-sm text-gray-500">— Sin líderes vinculados —</div>`;
+  }).join('');
 
-  leadersList.querySelectorAll('button[data-ficha]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const u = decodeURIComponent(btn.getAttribute('data-ficha'));
-      openLeaderFicha(u);
-    });
+// Botones "Ficha Líder" en el panel de llamadas
+container.querySelectorAll('button[data-ficha]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const raw = btn.getAttribute('data-ficha') || '';
+    const url = decodeURIComponent(raw);
+    if (!url) return;
+    try {
+      openLeaderFicha(url);
+    } catch (err) {
+      console.error('Error al abrir ficha de líder:', err);
+    }
   });
-
-  const btnSaveCalls = container.querySelector('#btnSaveCalls');
+});
+const btnSaveCalls = container.querySelector('#btnSaveCalls');
   const toastCalls = container.querySelector('#saveCallsToast');
   btnSaveCalls.addEventListener('click', async ()=>{
     const items = [];
+
+    // Usuarios con selector de estado de llamada
+    leadersList.querySelectorAll('.leader-call-status').forEach(sel=>{
+      const rid = sel.getAttribute('data-rid')||'';
+      const nombre = sel.getAttribute('data-nombre')||'';
+      const status = (sel.value || '').toString().toUpperCase();
+      const note = leadersList.querySelector(`.leader-note[data-rid="${CSS.escape(rid)}"]`)?.value || '';
+      const llamadaBool = (status === 'SI');
+      items.push({
+        rid,
+        nombre,
+        llamada: llamadaBool,
+        llamadaStatus: status,
+        nota: note,
+        fecha: new Date().toISOString().slice(0,10)
+      });
+    });
+
+    // Usuarios con checkbox tradicional
     leadersList.querySelectorAll('.leader-call').forEach(chk=>{
       const rid = chk.getAttribute('data-rid')||'';
       const nombre = chk.getAttribute('data-nombre')||'';
       const note = leadersList.querySelector(`.leader-note[data-rid="${CSS.escape(rid)}"]`)?.value || '';
-      items.push({ rid, nombre, llamada: !!chk.checked, nota: note, fecha: new Date().toISOString().slice(0,10) });
+      const llamadaBool = !!chk.checked;
+      const status = llamadaBool ? 'SI' : '';
+      items.push({
+        rid,
+        nombre,
+        llamada: llamadaBool,
+        llamadaStatus: status,
+        nota: note,
+        fecha: new Date().toISOString().slice(0,10)
+      });
     });
+
     toastCalls.textContent="Guardando…"; btnSaveCalls.disabled=true;
     try{
       await saveLeaderCallsBatch(items);
@@ -2078,6 +2174,9 @@ function renderEventPanel(ev){
               row["LLAMADA_2025"] = it.llamada ? "SI" : "";
               row["LLAMADA_FECHA"] = it.fecha || new Date().toISOString().slice(0,10);
               row["LLAMADA_NOTA"]  = it.nota || "";
+              if (Object.prototype.hasOwnProperty.call(it, 'llamadaStatus')) {
+                row["LLAMADA_STATUS"] = it.llamadaStatus || "";
+              }
             }
           }
         }
@@ -2244,14 +2343,20 @@ function renderEventPanel(ev){
   /* Guardar evento (Estatus / Equipo / Nota / Fecha / Hora) */
   const btn=container.querySelector("#btnSaveEvent");
   const toast=container.querySelector("#saveToast");
-  const initial={Estatus:String(ex.estatus||"").toUpperCase(), Equipo:equipoActual, nota:ex.nota||"", fecha:fechaISO, hora:horaStr};
-  const changed=()=> String(container.querySelector("#fldEstatus").value).toUpperCase()!==initial.Estatus
-                || String(container.querySelector("#fldEquipo").value)!==initial.Equipo
-                || String(container.querySelector("#fldNotas").value)!==initial.nota
-                || String(container.querySelector("#fldFecha").value)!==initial.fecha
-                || String(container.querySelector("#fldHora").value)!==initial.hora;
+  const fldDipLocal = container.querySelector("#fldEstadoLlamadaDipLocal");
+  const initial={Estatus:String(ex.estatus||"").toUpperCase(), Equipo:equipoActual, nota:ex.nota||"", fecha:fechaISO, hora:horaStr, estadoDipLocal:(ex.estadoLlamadaDipLocal||"").toUpperCase()};
+  const changed=()=> {
+    const estadoDipActual = fldDipLocal ? String(fldDipLocal.value||"").toUpperCase() : initial.estadoDipLocal;
+    return String(container.querySelector("#fldEstatus").value).toUpperCase()!==initial.Estatus
+        || String(container.querySelector("#fldEquipo").value)!==initial.Equipo
+        || String(container.querySelector("#fldNotas").value)!==initial.nota
+        || String(container.querySelector("#fldFecha").value)!==initial.fecha
+        || String(container.querySelector("#fldHora").value)!==initial.hora
+        || estadoDipActual!==initial.estadoDipLocal;
+  };
   const updateBtn=()=>{btn.disabled=!changed(); btn.style.opacity = btn.disabled ? 0.5 : 1;}; /* FIX ternario */
-  container.querySelectorAll('#fldEstatus,#fldEquipo,#fldNotas,#fldFecha,#fldHora').forEach(el=>el.addEventListener('input',updateBtn));
+  const watchSelector = '#fldEstatus,#fldEquipo,#fldNotas,#fldFecha,#fldHora' + (fldDipLocal ? ',#fldEstadoLlamadaDipLocal' : '');
+  container.querySelectorAll(watchSelector).forEach(el=>el.addEventListener('input',updateBtn));
   updateBtn();
 
   btn.addEventListener('click', async()=>{
@@ -2267,7 +2372,8 @@ function renderEventPanel(ev){
 
     toast.textContent="Guardando…"; btn.disabled=true;
     try{
-      await saveEventFields({ id, Estatus, Equipo, notas, fecha, hora, action:"update" });
+      const estadoDipLocal = fldDipLocal ? String(fldDipLocal.value||"").toUpperCase() : "";
+      await saveEventFields({ id, Estatus, Equipo, notas, fecha, hora, estado_llamada_dip_local: estadoDipLocal, action:"update" });
       const evInCal = calendarInstance.getEvents().find(e => (e.extendedProps?.id === id));
       if(evInCal){
         evInCal.setExtendedProp("estatus", Estatus);
@@ -2275,6 +2381,8 @@ function renderEventPanel(ev){
         evInCal.setExtendedProp("nota",    notas);
         evInCal.setExtendedProp("hora",    hora);
         evInCal.setExtendedProp("fechaISO",fecha);
+        const estadoDipLocal = fldDipLocal ? String(fldDipLocal.value||"").toUpperCase() : "";
+        evInCal.setExtendedProp("estadoLlamadaDipLocal", estadoDipLocal);
         const start = hora ? `${fecha}T${hora}:00` : fecha;
         evInCal.setStart(start);
         evInCal.setAllDay(!hora);
